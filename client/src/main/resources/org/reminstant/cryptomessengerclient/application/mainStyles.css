@@ -1,0 +1,268 @@
+/*.scroll-bar*/
+/*{*/
+/*    -fx-skin: "org.reminstant.cryptomessengerclient.application.MinimalScrollBarSkin";*/
+/*    -fx-background-color: transparent;*/
+/*}*/
+
+/*.scroll-bar {*/
+/*    -fx-background-color: #9f9f9f;*/
+/*}*/
+
+.split-pane .split-pane-divider {
+    -fx-background-color: #afafaf;
+    /*-fx-padding: 0 0.75em 0 0.75em;*/
+}
+
+
+.scroll-bar:vertical .increment-button,
+.scroll-bar:vertical .decrement-button,
+.scroll-bar:vertical .increment-arrow,
+.scroll-bar:vertical .decrement-arrow {
+    -fx-padding: 0 0 0 5;
+}
+
+.scroll-pane,
+.scroll-pane:focused {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.scroll-pane .thumb {
+    /*-fx-font-size: 16px;*/
+    /*-fx-background-color: red;*/
+    /*-fx-min-width: 20px;*/
+    /*-fx-background-color: red;*/
+}
+
+.root {
+    /*-fx-background-color: #345621;*/
+}
+
+#leftBlock {
+    -fx-background-color: #afafaf;
+}
+
+#rightBlock {
+    -fx-background-color: #cfcfcf;
+    -fx-border-width: 0 0 0 1px;
+    -fx-border-color: #424242;
+}
+
+/* Left block content */
+
+#menu {
+    -fx-background-color: #afafaf;
+}
+
+/* TODO: move */
+.image-view:hover {
+    /*-fx-scale-x: 1.1;*/
+    /*-fx-scale-y: 1.1;*/
+    -fx-effect: dropshadow(gaussian, white, 5, 0.3, 0, 0);
+}
+
+#leftBlock .scroll-pane .scroll-bar {
+    -fx-background-color: transparent;
+    -fx-translate-x: 5px;
+    -fx-scale-x: 1.5;
+}
+
+#chatHolder {
+    -fx-min-width: 150px;
+    -fx-spacing: 5px;
+}
+
+.secretChatEntry {
+    -fx-max-width: "Infinity";
+    -fx-min-height: 40px;
+    -fx-padding: 0 0 0 5;
+
+    -fx-background-color: #9f9f9f;
+
+    -fx-font-size: 14pt;
+    -fx-text-fill: black;
+}
+
+.secretChatEntry:hover {
+    -fx-background-color: #8f8f8f;
+}
+
+.secretChatEntry:active {
+    -fx-background-color: #5f8f8f;
+}
+
+.secretChatEntry:pending {
+    -fx-border-width: 0 0 0 6px;
+    -fx-border-color: #999900;
+}
+
+.secretChatEntry:awaiting {
+    -fx-border-width: 0 0 0 6px;
+    -fx-border-color: #00CCCC;
+}
+
+.secretChatEntry:connected {
+    -fx-border-width: 0 0 0 6px;
+    -fx-border-color: #009900;
+}
+
+.secretChatEntry:disconnected {
+    -fx-border-width: 0 0 0 6px;
+    -fx-border-color: #666666;
+}
+
+.secretChatEntry:rejected {
+    -fx-border-width: 0 0 0 6px;
+    -fx-border-color: #990000;
+}
+
+.secretChatEntry:deserted, .secretChatEntry:destroyed {
+    -fx-border-width: 0 0 0 6px;
+    -fx-border-color: #222222;
+}
+
+/* Right block content */
+
+#chatHeader {
+    -fx-background-color: #afafaf;
+    -fx-border-width: 0 0 1px 0;
+    -fx-border-color: #424242;
+}
+
+#chatTitle {
+    -fx-font-size: 16pt;
+}
+
+.stateBlock {
+    -fx-min-height: 45;
+    -fx-max-height: 45;
+    -fx-padding: 0 10px 0 10px;
+
+    -fx-border-width: 0 0 1px 0;
+    -fx-border-color: #424242;
+
+    -fx-alignment: center;
+    -fx-spacing: 10px;
+
+    -fx-background-color: #AFAFAF;
+}
+
+.stateBlock > .label {
+    -fx-font-size: 14pt;
+}
+
+.stateBlock .button {
+    -fx-font-size: 12pt;
+    -fx-background-radius: 8;
+}
+
+#chatFooter {
+    -fx-background-color: #afafaf;
+    -fx-border-width: 1px 0 0 0;
+    -fx-border-color: #424242;
+}
+
+#messageInput {
+    -fx-min-height: 35px;
+    -fx-max-height: 0px;
+    -fx-padding: 0px 10px 0px 10px;
+
+    -fx-background-color: transparent;
+
+    -fx-wrap-text: true;
+    -fx-font-size: 14pt;
+    -fx-prompt-text-fill: #696969;
+}
+
+#messageInput .scroll-pane,
+#messageInput .scroll-pane .viewport,
+#messageInput .scroll-pane .content{
+    -fx-background-color: transparent;
+}
+
+#messageInput .scroll-bar:vertical .increment-button,
+#messageInput .scroll-bar:vertical .decrement-button,
+#messageInput .scroll-bar:vertical .increment-arrow,
+#messageInput .scroll-bar:vertical .decrement-arrow {
+    -fx-padding: 0 0 0 0.0001;
+}
+
+
+#shadow {
+    -fx-background-color: #888888B0;
+}
+
+
+.dialogBlock {
+    -fx-background-radius: 15;
+    -fx-alignment: center;
+
+    -fx-background-color: #DFDFDF;
+}
+
+.dialogBlock .blockTitle {
+    -fx-padding: 10px 0 15px 0;
+    -fx-font-size: 18pt;
+}
+
+.dialogBlock .inputLabel {
+    -fx-max-width: Infinity;
+    -fx-padding: 0 25px 0 25px;
+
+    -fx-font-size: 14pt;
+}
+
+.dialogBlock .inputHolder {
+    -fx-padding: 3px 25px 15px 25px;
+}
+
+.dialogBlock .input {
+    -fx-padding: 5px;
+    -fx-font-size: 12pt;
+}
+
+.notificationLabel {
+    -fx-max-width: Infinity;
+    -fx-padding: 8px 20px 8px 20px;
+    -fx-background-insets: 0px 10px 0px 10px;
+    -fx-background-radius: 10px;
+
+    -fx-font-size: 12pt;
+    -fx-wrap-text: true;
+}
+
+.dialogBlock .buttonHolder {
+    -fx-alignment: top-center;
+}
+
+.dialogBlock .button {
+    -fx-background-radius: 15px;
+
+    -fx-font-size: 14pt;
+
+    -fx-cursor: hand;
+}
+
+#chatCreationBlock {
+    -fx-min-width: 400px;
+    -fx-min-height: 300px;
+    -fx-max-width: 400px;
+    -fx-max-height: 300px;
+}
+
+#chatCreationBlock .buttonHolderWrapper {
+    -fx-padding: 0 40px 15px 40px;
+}
+
+#chatDeletionBlock {
+    -fx-min-width: 400px;
+    -fx-min-height: 200px;
+    -fx-max-width: 400px;
+    -fx-max-height: 200px;
+}
+
+#chatDeletionBlock .buttonHolder {
+    -fx-padding: 0 0px 10px 0px;
+}
+
+

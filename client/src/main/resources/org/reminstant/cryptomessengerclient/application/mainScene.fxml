@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+
+<?import org.reminstant.cryptomessengerclient.application.control.*?>
+
+<StackPane fx:id="rootPane" prefHeight="600.0" prefWidth="900.0" stylesheets="@mainStyles.css, @notification.css" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.reminstant.cryptomessengerclient.application.MainSceneController">
+    <SplitPane dividerPositions="0.3">
+        <AnchorPane fx:id="leftBlock" minWidth="150.0">
+            <AnchorPane fx:id="menu" prefHeight="50.0" AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="0">
+                <ImageView fx:id="settingsButton" AnchorPane.leftAnchor="4" AnchorPane.topAnchor="12">
+                    <Image url="@icons/filled/settingsIcon32x32.png" />
+                </ImageView>
+                <ImageView fx:id="addChatButton" AnchorPane.rightAnchor="6" AnchorPane.topAnchor="12">
+                    <Image url="@icons/filled/addChatIcon32x32.png" />
+                </ImageView>
+            </AnchorPane>
+            <ScrollPane fx:id="chatHolderScroll" hbarPolicy="NEVER" AnchorPane.bottomAnchor="0" AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="55">
+                <VBox fx:id="chatHolder" maxWidth="Infinity" prefHeight="150.0">
+<!--                    <Label styleClass="secretChatEntry">goodChat</Label>-->
+                </VBox>
+            </ScrollPane>
+        </AnchorPane>
+        <VBox fx:id="rightBlock" minWidth="300.0">
+            <AnchorPane fx:id="chatHeader" prefHeight="50.0">
+                <Label fx:id="chatTitle" AnchorPane.leftAnchor="40" AnchorPane.rightAnchor="40" AnchorPane.topAnchor="12">
+                    ChatTitle
+                </Label>
+                <ImageView fx:id="deleteChatButton" AnchorPane.rightAnchor="8" AnchorPane.topAnchor="9">
+                    <Image url="@icons/filled/disconnectIcon32x32.png" />
+                </ImageView>
+            </AnchorPane>
+            <StackPane fx:id="chatStateBlockHolder">
+                <HBox fx:id="pendingStateBlock" styleClass="stateBlock">
+                    <Label>Ожидание подключения собеседника</Label>
+                </HBox>
+                <HBox fx:id="awaitingStateBlock" styleClass="stateBlock">
+                    <Label>Запрос на соединение</Label>
+                    <Pane HBox.hgrow="ALWAYS"/>
+                    <Button focusTraversable="false">подтвердить соединение</Button>
+                </HBox>
+                <HBox fx:id="connectedStateBlock" styleClass="stateBlock">
+                    <Label>Соединение установлено</Label>
+                    <Pane HBox.hgrow="ALWAYS"/>
+                    <Button focusTraversable="false">разорвать соединение</Button>
+                </HBox>
+                <HBox fx:id="disconnectedStateBlock" styleClass="stateBlock">
+                    <Label>Отсутствие соединения</Label>
+                    <Pane HBox.hgrow="ALWAYS"/>
+                    <Button focusTraversable="false">запросить соединение</Button>
+                </HBox>
+                <HBox fx:id="desertedStateBlock" styleClass="stateBlock">
+                    <Label>Собеседник покинул чат</Label>
+                </HBox>
+                <HBox fx:id="destroyedStateBlock" styleClass="stateBlock">
+                    <Label>Собеседник удалил чат</Label>
+                </HBox>
+            </StackPane>
+            <ScrollPane VBox.vgrow="ALWAYS">
+<!--                messages-->
+            </ScrollPane>
+            <AnchorPane fx:id="chatFooter">
+                <ImageView fx:id="attachButton" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
+                    <Image url="@icons/filled/attachIcon32x32.png" />
+                </ImageView>
+                <ExpandableTextArea fx:id="messageInput"
+                                    focusTraversable="false"
+                                    AnchorPane.leftAnchor="50" AnchorPane.rightAnchor="50"
+                                    AnchorPane.topAnchor="4" AnchorPane.bottomAnchor="8"
+                                    promptText="Message..."/>
+                <ImageView fx:id="sendButton" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">
+                    <Image url="@icons/filled/sendIcon32x32.png" />
+                </ImageView>
+            </AnchorPane>
+        </VBox>
+    </SplitPane>
+    <Pane fx:id="shadow" visible="false"/>
+    <VBox fx:id="chatCreationBlock" styleClass="dialogBlock" visible="false">
+        <Label styleClass="blockTitle">Создание чата</Label>
+        <Label styleClass="inputLabel">Собеседник</Label>
+        <VBox styleClass="inputHolder">
+            <TextField fx:id="chatCreatingUsernameField" focusTraversable="false" styleClass="input"/>
+        </VBox>
+        <NotificationLabel fx:id="chatCreationNotificationLabel" styleClass="notification"/>
+        <Pane VBox.vgrow="ALWAYS"/>
+        <HBox styleClass="buttonHolderWrapper">
+            <VBox styleClass="buttonHolder">
+                <Button fx:id="chatCreatingButton" focusTraversable="false">Создать</Button>
+            </VBox>
+            <Pane HBox.hgrow="ALWAYS"/>
+            <VBox styleClass="buttonHolder">
+                <Button fx:id="chatCreatingCancelButton" focusTraversable="false">Отмена</Button>
+            </VBox>
+        </HBox>
+    </VBox>
+    <VBox fx:id="chatDeletionBlock" styleClass="dialogBlock" visible="false">
+        <Label styleClass="blockTitle">Удалить чат?</Label>
+<!--        <NotificationLabel fx:id="chatCreationNotificationLabel" styleClass="notification"/>-->
+        <Pane VBox.vgrow="ALWAYS"/>
+        <VBox styleClass="buttonHolder">
+            <Button fx:id="chatSelfDeletionButton" focusTraversable="false">Удалить для себя</Button>
+        </VBox>
+        <VBox styleClass="buttonHolder">
+            <Button fx:id="chatDeletionButton" focusTraversable="false">Удалить для всех</Button>
+        </VBox>
+        <VBox styleClass="buttonHolder">
+            <Button fx:id="chatDeletionCancelButton" focusTraversable="false">Отмена</Button>
+        </VBox>
+    </VBox>
+</StackPane>

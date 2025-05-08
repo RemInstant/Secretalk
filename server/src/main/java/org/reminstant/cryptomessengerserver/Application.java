@@ -1,13 +1,13 @@
-package org.reminstant.cryptomessengerclient;
+package org.reminstant.cryptomessengerserver;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class CryptoMessengerClientApplication {
+public class Application {
 
   public static void main(String[] args) {
-    SpringApplication.run(CryptoMessengerClientApplication.class, args);
+    SpringApplication.run(Application.class, args);
   }
 
 }

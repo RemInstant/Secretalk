@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: CryptoMessengerClient
+
+logging:
+  level:
+    root: info
+    org:
+      reminstant: debug
+
+status:
+  description:
+    path: status.yaml

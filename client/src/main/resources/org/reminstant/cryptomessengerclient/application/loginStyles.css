@@ -1,0 +1,94 @@
+.root {
+    -fx-background-image: url(backgrounds/loginBackground.jpg);
+    -fx-background-size: 100% 100%;
+}
+
+#blockContainer {
+    -fx-translate-x: 0px;
+    transition: -fx-translate-x 0.3s ease;
+}
+
+#blockContainer:swiped {
+    -fx-translate-x: -600px;
+}
+
+.block {
+    -fx-background-radius: 15px;
+    -fx-alignment: top-center;
+
+    -fx-background-color: #5F5F5F50;
+}
+
+.blockTitle {
+    -fx-padding: 20px 0px 35px 0px;
+    /*-fx-background-insets: 20px 0px 40px 0px;*/
+
+    /*-fx-background-color: red;*/
+
+    -fx-font-size: 20pt;
+}
+
+.notificationLabel {
+    -fx-max-width: Infinity;
+    -fx-padding: 8px 20px 8px 20px;
+    -fx-background-insets: 0px 10px 0px 10px;
+    -fx-background-radius: 10px;
+
+    -fx-font-size: 12pt;
+    -fx-wrap-text: true;
+}
+
+.inputLabel {
+    -fx-max-width: Infinity;
+    -fx-padding: 0px 20px 0px 30px;
+    -fx-background-insets: 0px 20px 0px 30px;
+
+    -fx-font-size: 14pt;
+}
+
+.inputHolder {
+    -fx-max-width: Infinity;
+    -fx-padding: 3px 25px 15px 25px;
+}
+
+.input {
+    -fx-max-width: Infinity;
+    -fx-padding: 5px;
+    -fx-font-size: 12pt;
+}
+
+.buttonHolder {
+    -fx-max-width: Infinity;
+    -fx-padding: 10px 0px 10px 0px;
+
+    -fx-alignment: top-center;
+}
+
+.block Button {
+    -fx-background-radius: 15px;
+
+    -fx-font-size: 14pt;
+
+    -fx-cursor: hand;
+}
+
+#noAccountButton, #backToLoginButton {
+    -fx-padding: 0px 0px 0px 0px;
+    -fx-background-insets: 0px 0px 10px 0px;
+    -fx-border-insets: 0px 0px 10px 0px;
+
+    -fx-background-color: transparent;
+
+    -fx-border-style: dashed;
+    -fx-border-color: #444444;
+    -fx-border-width: 0 0 2px 0;
+
+    -fx-font-size: 14pt;
+    -fx-text-fill: #444444;
+
+    -fx-cursor: hand;
+}
+
+#noAccountButton:focused, #backToLoginButton:focused {
+    -fx-border-color: lightskyblue;
+}

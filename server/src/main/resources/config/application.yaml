@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: cryptoMessengerServer
+  profiles:
+    include:
+      - jwt
+  datasource:
+    url: jdbc:postgresql://localhost:35432/crypto
+    username: root
+    password: admin
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+#  kafka:
+#    bootstrap-servers: kafka:9092
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: info
+    org:
+      reminstant:
+        cryptomessengerserver: debug
+
+nats:
+  server:
+    url: localhost:4223
+  streams:
+    event:
+      name: MESSENGER_EVENT_STREAM
+      subject-prefix: MESSENGER.EVENTS
+
+api:
+  login: /api/auth/login
+  register: /api/auth/register
+  get-dh-params: /api/chat/get-dh-params
+  get-event: /api/chat/get-event
+  acknowledge-event: /api/chat/ack-event
+  request-chat-connection: /api/chat/request-chat-connection
+  accept-chat-connection: /api/chat/accept-chat-connection
+  break-chat-connection: /api/chat/break-chat-connection
+  desert-chat: /api/chat/desert-chat
+  destroy-chat: /api/chat/destroy-chat
+

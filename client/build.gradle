@@ -1,5 +1,7 @@
 plugins {
     id 'java'
+//    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
     id 'org.springframework.boot' version '3.4.4'
     id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -13,16 +15,47 @@ java {
     }
 }
 
+//application {
+//    mainModule = 'org.reminstant.cryptomessengerclient'
+//    mainClass = 'org.reminstant.cryptomessengerclient.SpringBootWrapperApplication'
+//}
+
+javafx {
+    version = "24.0.1"
+    modules = [ 'javafx.controls', 'javafx.fxml' ]
+}
+
 repositories {
     mavenCentral()
 }
 
 dependencies {
+    implementation 'org.controlsfx:controlsfx:11.2.1'
+    implementation 'org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0'
+    implementation 'org.openjfx:javafx:24'
+
     implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'net.rgielen:javafx-weaver-spring-boot-starter:2.0.1'
+    implementation 'org.yaml:snakeyaml:2.4'
+
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+    testCompileOnly 'org.projectlombok:lombok:1.18.36'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    implementation 'ch.qos.logback:logback-classic:1.5.18'
+//    testImplementation 'org.slf4j:slf4j-simple:2.0.17'
+
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.19.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+//    testImplementation 'org.testng:testng:7.8.0'
 }
 
-tasks.named('test') {
+test {
+//    useTestNG()
     useJUnitPlatform()
 }

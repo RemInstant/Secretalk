@@ -1,0 +1,27 @@
+.notificationLabel {
+    transition: -fx-background-color 1s 0s ease;
+}
+
+.notificationLabel:collapsed {
+    -fx-padding: 0px 0px 0px 0px;
+    -fx-background-color: transparent;
+    -fx-font-size: 0.001pt;
+}
+
+.notificationLabel:isSuccess {
+    -fx-background-color: #00FF0050;
+}
+
+.notificationLabel:isError {
+    -fx-background-color: #FF000050;
+}
+
+.notificationLabel:isSuccess:glowing {
+    -fx-background-color: #00FF0080;
+    transition: -fx-background-color 0s ease;
+}
+
+.notificationLabel:isError:glowing {
+    -fx-background-color: #FF000080;
+    transition: -fx-background-color 0s ease;
+}
