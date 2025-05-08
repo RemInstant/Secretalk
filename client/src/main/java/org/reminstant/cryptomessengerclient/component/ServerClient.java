@@ -198,13 +198,4 @@ public class ServerClient {
       throw new InvalidServerAnswer(request.uri(), "Invalid body: " + response.body(), ex);
     }
   }
-
-//  private <T> T getDefaultResponseInstance(Class<T> c) {
-//    try {
-//      return c.getConstructor().newInstance();
-//    } catch (ReflectiveOperationException ex) {
-//      log.error("Cannot construct default response instance", ex);
-//      return null;
-//    }
-//  }
 }

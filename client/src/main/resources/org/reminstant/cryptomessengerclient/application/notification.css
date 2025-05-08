@@ -1,4 +1,5 @@
 .notificationLabel {
+    -fx-background-color: #00000000;
     transition: -fx-background-color 1s 0s ease;
 }
 
