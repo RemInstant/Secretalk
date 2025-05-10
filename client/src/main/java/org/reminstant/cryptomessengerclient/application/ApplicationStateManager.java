@@ -8,6 +8,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Screen;
@@ -70,18 +71,19 @@ public class ApplicationStateManager {
   public void init(Stage stage) {
     this.stage = stage;
     stage.setTitle("123");
-    showLoginScene();
-//    showMainScene(); // NOSONAR
-//    chatManager.loadChats(); // NOSONAR
+//    showLoginScene();
+    showMainScene(); // NOSONAR
+    chatManager.loadChats(); // NOSONAR
   }
 
-  public void initChatManager(Pane chatHolder, Label chatTitle, StackPane chatStateBlockHolder,
+  public void initChatManager(Pane chatHolder, Label chatTitle,
+                              StackPane chatStateBlockHolder, ScrollPane messageHolderWrapper,
                               Runnable onChatOpening, Runnable onChatClosing) {
     ToIntFunction<SecretChat> onChatRequest = chat -> processChatRequest(chat.getId(), chat.getTitle());
     ToIntFunction<SecretChat> onChatAccept = chat -> processChatAcceptance(chat.getId(), chat.getTitle());
     ToIntFunction<SecretChat> onChatDisconnect = chat -> processChatDisconnect(chat.getId(), chat.getTitle());
 
-    chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder);
+    chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper);
     chatManager.initBehaviour(onChatOpening, onChatClosing, onChatRequest, onChatAccept, onChatDisconnect);
     log.info("ChatManager INITIALIZED");
   }

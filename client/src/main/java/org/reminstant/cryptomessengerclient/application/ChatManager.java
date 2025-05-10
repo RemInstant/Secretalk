@@ -4,12 +4,16 @@ import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import lombok.extern.slf4j.Slf4j;
+import org.reminstant.cryptomessengerclient.application.control.MessageEntry;
 import org.reminstant.cryptomessengerclient.application.control.SecretChatEntry;
+import org.reminstant.cryptomessengerclient.model.Message;
 import org.reminstant.cryptomessengerclient.model.SecretChat;
 import org.reminstant.cryptomessengerclient.repository.LocalStorage;
 import org.springframework.stereotype.Component;
@@ -28,10 +32,12 @@ public class ChatManager {
 
   private Pane chatHolder = null;
   private Label chatTitle = null;
+  private ScrollPane messageHolderWrapper = null;
 
   private final Map<SecretChat.State, Pane> stateBlocks;
   private final Map<String, SecretChatEntry> secretChatEntries;
   private final SimpleObjectProperty<SecretChatEntry> activeChat;
+  private final Map<String, VBox> messageHolders;
 
 
   public ChatManager(LocalStorage localStorage) {
@@ -40,6 +46,7 @@ public class ChatManager {
     this.stateBlocks = new EnumMap<>(SecretChat.State.class);
     this.secretChatEntries = new ConcurrentHashMap<>();
     this.activeChat = new SimpleObjectProperty<>(null);
+    this.messageHolders = new ConcurrentHashMap<>();
 
     activeChat.addListener((_, oldActiveChat, newActiveChat) -> {
       if (oldActiveChat != null) {
@@ -50,17 +57,22 @@ public class ChatManager {
         newActiveChat.setChatActive(true);
         chatTitle.setText(newActiveChat.getSecretChat().getTitle());
         stateBlocks.get(newActiveChat.getSecretChat().getState()).setVisible(true);
+        messageHolderWrapper.setContent(messageHolders.get(newActiveChat.getSecretChat().getId()));
+      } else {
+        messageHolderWrapper.setContent(null);
       }
     });
   }
 
   public void initObjects(Pane chatHolder,
                           Label chatTitle,
-                          StackPane chatStateBlockHolder) {
+                          StackPane chatStateBlockHolder,
+                          ScrollPane messageHolderWrapper) {
     Objects.requireNonNull(chatHolder, "chatHolder cannot be null");
     Objects.requireNonNull(chatTitle, "chatTitle cannot be null");
     this.chatHolder = chatHolder;
     this.chatTitle = chatTitle;
+    this.messageHolderWrapper = messageHolderWrapper;
 
     chatStateBlockHolder.getChildren().forEach(node -> {
       if (node instanceof Pane pane) {
@@ -129,6 +141,7 @@ public class ChatManager {
   public void loadChats() {
     throwIfUninitialised();
     localStorage.getSecretChats().forEach(this::createOrReconnect);
+    messageHolders.keySet().forEach(chatId -> insertMessages(chatId, localStorage.getMessages(chatId)));
   }
 
   public String getActiveChatId() {
@@ -177,7 +190,7 @@ public class ChatManager {
       log.error("Tried to disconnect from non-existent chat");
       return;
     }
-    if (!chatEntry.getSecretChat().getTitle().equals(otherUsername)) {
+    if (!chatEntry.getSecretChat().getTitle().equals(otherUsername)) { // TODO: move it to appManager?
       log.error("Tried to disconnect from someone else's chat (got notification from {})", otherUsername);
       return;
     }
@@ -226,21 +239,36 @@ public class ChatManager {
     activeChat.set(null);
     String idToDelete = chatEntry.getSecretChat().getId();
 
-    Runnable runnable = () -> chatHolder.getChildren().removeIf(node ->
+    runOnFxThread(() -> chatHolder.getChildren().removeIf(node ->
         node instanceof SecretChatEntry entry &&
-        entry.getSecretChat().getId().equals(idToDelete));
-
-    if (Platform.isFxApplicationThread()) {
-      runnable.run();
-    } else {
-      Platform.runLater(runnable);
-    }
+        entry.getSecretChat().getId().equals(idToDelete)));
 
     secretChatEntries.remove(chatEntry.getSecretChat().getId());
     log.info("Deleted chat: {}", chatEntry.getSecretChat());
   }
 
-  
+  public void insertMessage(String chatId, Message message) {
+    if (!secretChatEntries.containsKey(chatId)) {
+      log.error("Tried to insert message into non-existent chat");
+      return;
+    }
+
+    VBox messageHolder = messageHolders.get(chatId);
+    runOnFxThread(() -> messageHolder.getChildren().add(new MessageEntry(message)));
+  }
+
+  public void insertMessages(String chatId, Collection<Message> messages) {
+    if (!secretChatEntries.containsKey(chatId)) {
+      log.error("Tried to insert message into non-existent chat");
+      return;
+    }
+
+    VBox messageHolder = messageHolders.get(chatId);
+    runOnFxThread(() -> messageHolder.getChildren().addAll(
+        messages.stream().map(MessageEntry::new).toList()));
+  }
+
+
 
   private void createOrReconnect(SecretChat chat) {
     throwIfUninitialised();
@@ -255,7 +283,10 @@ public class ChatManager {
     }
 
     chatEntry = new SecretChatEntry(chat);
+    VBox messageHolder = new VBox();
+
     secretChatEntries.put(chat.getId(), chatEntry);
+    messageHolders.put(chat.getId(), messageHolder);
 
     chatEntry.getStateProperty().addListener((observableValue, oldState, newState) -> {
       // TODO: research memory leaks
@@ -266,17 +297,13 @@ public class ChatManager {
     });
 
     SecretChatEntry finalChatEntry = chatEntry;
-    Runnable runnable = () -> {
+    runOnFxThread(() -> {
       chatHolder.getChildren().add(finalChatEntry);
       finalChatEntry.setOnMouseClicked(this::onSecretChatEntryClicked);
+      messageHolder.getStyleClass().add("messageHolder");
+      messageHolder.minHeightProperty().bind(messageHolderWrapper.heightProperty().subtract(2));
       log.debug("Created chat: {}", chat);
-    };
-
-    if (Platform.isFxApplicationThread()) {
-      runnable.run();
-    } else {
-      Platform.runLater(runnable);
-    }
+    });
   }
 
   private void onSecretChatEntryClicked(MouseEvent e) {
@@ -303,6 +330,14 @@ public class ChatManager {
         log.error("{}: code {}", errorMessage, status);
       }
     };
+  }
+
+  private void runOnFxThread(Runnable runnable) {
+    if (Platform.isFxApplicationThread()) {
+      runnable.run();
+    } else {
+      Platform.runLater(runnable);
+    }
   }
 
   private void throwIfUninitialised() {

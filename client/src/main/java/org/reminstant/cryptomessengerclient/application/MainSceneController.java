@@ -12,7 +12,9 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import net.rgielen.fxweaver.core.FxmlView;
 import org.reminstant.cryptomessengerclient.application.control.ExpandableTextArea;
+import org.reminstant.cryptomessengerclient.application.control.MessageEntry;
 import org.reminstant.cryptomessengerclient.application.control.NotificationLabel;
+import org.reminstant.cryptomessengerclient.model.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -56,6 +58,9 @@ public class MainSceneController implements Initializable {
   private Label chatTitle;
   @FXML
   private StackPane chatStateBlockHolder;
+
+  @FXML
+  private ScrollPane messageHolderWrapper;
 
   // "dialog" panes
   @FXML
@@ -102,7 +107,8 @@ public class MainSceneController implements Initializable {
     Runnable onOpening = () -> rightBlock.getChildren().forEach(node -> node.setVisible(true));
     Runnable onClosing = () -> rightBlock.getChildren().forEach(node -> node.setVisible(false));
 
-    stateManager.initChatManager(chatHolder, chatTitle, chatStateBlockHolder, onOpening, onClosing);
+    stateManager.initChatManager(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper,
+        onOpening, onClosing);
     log.info("MainSceneController INITIALIZED");
   }
 

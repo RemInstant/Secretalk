@@ -43,12 +43,14 @@
 }
 
 #rightBlock {
+    -fx-min-width: 300px;
+
     -fx-background-color: #cfcfcf;
     -fx-border-width: 0 0 0 1px;
     -fx-border-color: #424242;
 }
 
-/* Left block content */
+/* LEFT BLOCK CONTENT */
 
 #menu {
     -fx-background-color: #afafaf;
@@ -65,6 +67,10 @@
     -fx-background-color: transparent;
     -fx-translate-x: 5px;
     -fx-scale-x: 1.5;
+}
+
+#leftBlock .scroll-pane .thumb {
+    -fx-background-color: #e8e8e8;
 }
 
 #chatHolder {
@@ -121,9 +127,13 @@
     -fx-border-color: #222222;
 }
 
-/* Right block content */
+/* RIGHT BLOCK CONTENT */
 
+/* Chat header begin */
 #chatHeader {
+    -fx-min-height: 50px;
+    -fx-max-height: 50px;
+
     -fx-background-color: #afafaf;
     -fx-border-width: 0 0 1px 0;
     -fx-border-color: #424242;
@@ -132,7 +142,9 @@
 #chatTitle {
     -fx-font-size: 16pt;
 }
+/* Chat header end */
 
+/* State block begin */
 .stateBlock {
     -fx-min-height: 45;
     -fx-max-height: 45;
@@ -155,7 +167,99 @@
     -fx-font-size: 12pt;
     -fx-background-radius: 8;
 }
+/* State block end */
 
+/* Message block begin */
+#messageHolderWrapper {
+    -fx-fit-to-width: true;
+}
+
+#messageHolderWrapper.scroll-pane .scroll-bar {
+    -fx-background-color: transparent;
+    /*-fx-scale-x: 1.5;*/
+}
+
+#messageHolderWrapper.scroll-pane .thumb {
+    -fx-background-color: #aaaaaa;
+}
+
+.messageHolder {
+    -fx-min-height: 100%;
+    -fx-max-height: INFINITY;
+    -fx-padding: 5px 5px 5px 5px;
+
+    -fx-alignment: bottom-center;
+    -fx-spacing: 5px;
+}
+
+/*to delete*/
+.messageHolder > .label {
+    -fx-font-size: 30pt;
+}
+
+.messageBlock {
+    -fx-max-width: 288px;
+    -fx-max-height: INFINITY;
+    -fx-padding: 10px 15px 5px 15px;
+    -fx-background-radius: 10px;
+
+    -fx-alignment: center-right;
+    -fx-spacing: 5px;
+
+    -fx-background-color: #c0c0c0;
+}
+
+.messageBlock .messageText {
+    -fx-max-width: INFINITY;
+    -fx-font-size: 14pt;
+    -fx-text-fill: #181818;
+    -fx-wrap-text: true;
+}
+
+.messageBlock .messageAuthor {
+    -fx-font-size: 11pt;
+    -fx-text-fill: #333333;
+}
+
+.messageBlock .messageProgressBlock {
+    -fx-spacing: 10px;
+    -fx-alignment: bottom-center;
+}
+
+.messageBlock .messageProgressBar {
+    -fx-max-width: INFINITY;
+    -fx-max-height: 12px;
+}
+
+.messageBlock .messageProgressBar .bar {
+    -fx-background-radius: 15px;
+}
+
+.messageBlock .messageProgressBar .track {
+    -fx-background-radius: 15px;
+}
+
+.messageBlock .stateLabel {
+    -fx-font-size: 10pt;
+    -fx-text-fill: #333333;
+}
+
+.messageBlock .messageCancelLabel {
+    -fx-font-size: 10pt;
+    -fx-text-fill: #111111;
+}
+
+.messageBlock .messageCancelButton {
+    -fx-max-width: INFINITY;
+    -fx-background-radius: 10px;
+
+    -fx-font-size: 11pt;
+}
+
+
+/* Message block end */
+
+/* Chat footer begin */
 #chatFooter {
     -fx-background-color: #afafaf;
     -fx-border-width: 1px 0 0 0;
@@ -163,8 +267,6 @@
 }
 
 #messageInput {
-    -fx-min-height: 35px;
-    -fx-max-height: 0px;
     -fx-padding: 0px 10px 0px 10px;
 
     -fx-background-color: transparent;
@@ -176,7 +278,7 @@
 
 #messageInput .scroll-pane,
 #messageInput .scroll-pane .viewport,
-#messageInput .scroll-pane .content{
+#messageInput .scroll-pane .content {
     -fx-background-color: transparent;
 }
 
@@ -186,8 +288,9 @@
 #messageInput .scroll-bar:vertical .decrement-arrow {
     -fx-padding: 0 0 0 0.0001;
 }
+/* Chat footer end */
 
-
+/* Dialog blocks begin */
 #shadow {
     -fx-background-color: #888888B0;
 }
@@ -264,5 +367,6 @@
 #chatDeletionBlock .buttonHolder {
     -fx-padding: 0 0px 10px 0px;
 }
+/* Dialog blocks end */
 
 

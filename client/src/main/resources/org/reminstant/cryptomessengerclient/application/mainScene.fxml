@@ -18,16 +18,12 @@
                 </ImageView>
             </AnchorPane>
             <ScrollPane fx:id="chatHolderScroll" hbarPolicy="NEVER" AnchorPane.bottomAnchor="0" AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="55">
-                <VBox fx:id="chatHolder" maxWidth="Infinity" prefHeight="150.0">
-<!--                    <Label styleClass="secretChatEntry">goodChat</Label>-->
-                </VBox>
+                <VBox fx:id="chatHolder" maxWidth="Infinity" prefHeight="150.0" />
             </ScrollPane>
         </AnchorPane>
-        <VBox fx:id="rightBlock" minWidth="300.0">
-            <AnchorPane fx:id="chatHeader" prefHeight="50.0">
-                <Label fx:id="chatTitle" AnchorPane.leftAnchor="40" AnchorPane.rightAnchor="40" AnchorPane.topAnchor="12">
-                    ChatTitle
-                </Label>
+        <VBox fx:id="rightBlock">
+            <AnchorPane fx:id="chatHeader">
+                <Label fx:id="chatTitle" AnchorPane.leftAnchor="40" AnchorPane.rightAnchor="40" AnchorPane.topAnchor="12" />
                 <ImageView fx:id="deleteChatButton" AnchorPane.rightAnchor="8" AnchorPane.topAnchor="9">
                     <Image url="@icons/filled/disconnectIcon32x32.png" />
                 </ImageView>
@@ -58,9 +54,7 @@
                     <Label>Собеседник удалил чат</Label>
                 </HBox>
             </StackPane>
-            <ScrollPane VBox.vgrow="ALWAYS">
-<!--                messages-->
-            </ScrollPane>
+            <ScrollPane fx:id="messageHolderWrapper" VBox.vgrow="ALWAYS" /> <!--filled programmatically-->
             <AnchorPane fx:id="chatFooter">
                 <ImageView fx:id="attachButton" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
                     <Image url="@icons/filled/attachIcon32x32.png" />
