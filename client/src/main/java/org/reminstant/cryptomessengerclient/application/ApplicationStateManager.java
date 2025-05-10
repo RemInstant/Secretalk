@@ -15,14 +15,24 @@ import javafx.stage.Screen;
 import javafx.stage.Stage;
 import lombok.extern.slf4j.Slf4j;
 import net.rgielen.fxweaver.core.FxWeaver;
+import org.reminstant.concurrent.ChainExecutionException;
+import org.reminstant.concurrent.ChainTransportIntException;
+import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.ConcurrentUtil;
+import org.reminstant.concurrent.functions.ThrowingFunction;
+import org.reminstant.cryptography.Bits;
+import org.reminstant.cryptography.context.BlockCipherMode;
+import org.reminstant.cryptography.context.CryptoProgress;
+import org.reminstant.cryptography.context.Padding;
+import org.reminstant.cryptography.context.SymmetricCryptoContext;
+import org.reminstant.cryptography.symmetric.DES;
+import org.reminstant.cryptomessengerclient.application.control.MessageEntry;
 import org.reminstant.cryptomessengerclient.component.DiffieHellmanGenerator;
 import org.reminstant.cryptomessengerclient.component.ServerClient;
-import org.reminstant.cryptomessengerclient.dto.DHResponse;
-import org.reminstant.cryptomessengerclient.dto.JwtResponse;
 import org.reminstant.cryptomessengerclient.dto.NoPayloadResponse;
 import org.reminstant.cryptomessengerclient.dto.UserEventWrapperResponse;
 import org.reminstant.cryptomessengerclient.exception.InvalidServerAnswer;
+import org.reminstant.cryptomessengerclient.model.Message;
 import org.reminstant.cryptomessengerclient.model.SecretChat;
 import org.reminstant.cryptomessengerclient.model.event.*;
 import org.springframework.stereotype.Component;
@@ -34,7 +44,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.ToIntFunction;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 @Slf4j
@@ -43,6 +53,8 @@ public class ApplicationStateManager {
 
   private static final long EVENT_CYCLE_TIMEOUT = 30000;
   private static final int DH_PRIVATE_KEY_BIT_LENGTH = 512;
+
+  private static final String UNKNOWN_ERROR_LOG = "Unknown error";
   private static final String CONNECTION_FAILURE_LOG = "Failed to connect to the http server";
   private static final String INVALID_SERVER_ANSWER_LOG = "Got invalid server answer";
   private static final String DIFFIE_HELLMAN_NOT_INIT_LOG = "DiffieHellmanGenerator is uninitialised";
@@ -52,6 +64,8 @@ public class ApplicationStateManager {
   private final FxWeaver fxWeaver;
   private final ServerClient serverClient;
   private final ChatManager chatManager;
+
+  private final ThrowingFunction<Throwable, Integer> defaultHandler;
 
   private Stage stage = null;
   private Scene loginScene = null;
@@ -66,6 +80,28 @@ public class ApplicationStateManager {
     this.fxWeaver = fxWeaver;
     this.serverClient = serverClient;
     this.chatManager = chatManager;
+
+    defaultHandler = rawEx -> {
+      while (rawEx instanceof ChainExecutionException &&
+             rawEx.getCause() instanceof Exception ex) {
+        rawEx = ex;
+      }
+      return switch (rawEx) {
+        case IOException ex -> {
+          log.error(CONNECTION_FAILURE_LOG, ex);
+          yield 0;
+        }
+        case InvalidServerAnswer ex -> {
+          log.error(INVALID_SERVER_ANSWER_LOG, ex);
+          yield 602;
+        }
+        case ChainTransportIntException ex -> ex.getCargo();
+        default -> {
+          log.error(UNKNOWN_ERROR_LOG, rawEx);
+          yield 600;
+        }
+      };
+    };
   }
 
   public void init(Stage stage) {
@@ -79,57 +115,47 @@ public class ApplicationStateManager {
   public void initChatManager(Pane chatHolder, Label chatTitle,
                               StackPane chatStateBlockHolder, ScrollPane messageHolderWrapper,
                               Runnable onChatOpening, Runnable onChatClosing) {
-    ToIntFunction<SecretChat> onChatRequest = chat -> processChatRequest(chat.getId(), chat.getTitle());
-    ToIntFunction<SecretChat> onChatAccept = chat -> processChatAcceptance(chat.getId(), chat.getTitle());
-    ToIntFunction<SecretChat> onChatDisconnect = chat -> processChatDisconnect(chat.getId(), chat.getTitle());
+    Function<SecretChat, ChainableFuture<Integer>> onChatRequest =
+        chat -> processChatRequest(chat.getId(), chat.getTitle());
+
+    Function<SecretChat, ChainableFuture<Integer>> onChatAccept =
+        chat -> processChatAcceptance(chat.getId(), chat.getTitle());
+
+    Function<SecretChat, ChainableFuture<Integer>> onChatDisconnect =
+        chat -> processChatDisconnect(chat.getId(), chat.getTitle());
 
     chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper);
     chatManager.initBehaviour(onChatOpening, onChatClosing, onChatRequest, onChatAccept, onChatDisconnect);
     log.info("ChatManager INITIALIZED");
   }
 
-  public int processLogin(String username, String password) {
-    JwtResponse jwtResponse;
-    DHResponse dhResponse;
-    try {
-      jwtResponse = serverClient.processLogin(username, password);
-      if (jwtResponse.getStatus() != 200) {
-        return jwtResponse.getStatus();
-      }
-      dhResponse = serverClient.getDHParams();
-      if (dhResponse.getStatus() != 200) {
-        return dhResponse.getStatus();
-      }
-    } catch (IOException ex) {
-      log.error(CONNECTION_FAILURE_LOG, ex);
-      return 0;
-    } catch (InvalidServerAnswer ex) {
-      log.error(INVALID_SERVER_ANSWER_LOG, ex);
-      return 602;
-    }
-
-    log.info("LOGGED AS {}", username);
-
-    dh = new DiffieHellmanGenerator(dhResponse.getPrime(), dhResponse.getGenerator());
-    serverClient.saveCredentials(username, jwtResponse.getToken());
-    showMainScene();
-    chatManager.loadChats();
-    startEventCycle();
-
-    return 200;
+  public ChainableFuture<Integer> processLogin(String username, String password) {
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> serverClient.processLogin(username, password))
+        .thenWeaklyConsumeAsync(jwtResponse -> {
+          throwTransportIfStatusNotOk(jwtResponse.getStatus());
+          serverClient.saveCredentials(username, jwtResponse.getToken());
+        })
+        .thenWeaklySupplyAsync(serverClient::getDHParams)
+        .thenWeaklyConsumeAsync(dhResponse -> {
+          throwTransportIfStatusNotOk(dhResponse.getStatus());
+          dh = new DiffieHellmanGenerator(dhResponse.getPrime(), dhResponse.getGenerator());
+        })
+        .thenWeaklyRunAsync(() -> {
+          log.info("LOGGED AS {}", username);
+          showMainScene();
+          chatManager.loadChats();
+          startEventCycle();
+        })
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public int processRegister(String username, String password) {
-    try {
-      NoPayloadResponse noPayloadResponse = serverClient.processRegister(username, password);
-      return noPayloadResponse.getStatus();
-    } catch (IOException ex) {
-      log.error(CONNECTION_FAILURE_LOG, ex);
-      return 0;
-    } catch (InvalidServerAnswer ex) {
-      log.error(INVALID_SERVER_ANSWER_LOG, ex);
-      return 602;
-    }
+  public ChainableFuture<Integer> processRegister(String username, String password) {
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> serverClient.processRegister(username, password))
+        .thenWeaklyMapAsync(NoPayloadResponse::getStatus)
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
   public void processLogout() {
@@ -140,136 +166,136 @@ public class ApplicationStateManager {
     showLoginScene();
   }
 
-  public int processChatCreation(String otherUsername) {
+  public ChainableFuture<Integer> processChatCreation(String otherUsername) {
     String chatId = UUID.randomUUID().toString();
     return processChatRequest(chatId, otherUsername);
   }
 
-  public int processChatDeserting() {
+  public ChainableFuture<Integer> processChatDeserting() {
+    boolean isActiveChatAboutToDelete = chatManager.isActiveChatAboutToDelete();
     String chatId = chatManager.getActiveChatId();
     String otherUsername = chatManager.getActiveChatOtherUsername();
-    boolean isActiveChatAboutToDelete = chatManager.isActiveChatAboutToDelete();
+
     if (chatId == null || otherUsername == null) {
       log.error("Tried to desert chat when there no active chats");
-      return 601;
+      return ChainableFuture.supplyWeaklyAsync(() -> 601);
     }
 
+    ChainableFuture<?> future = ChainableFuture.getCompleted();
     if (!isActiveChatAboutToDelete) {
-      try {
-        NoPayloadResponse response = serverClient.desertChat(chatId, otherUsername);
-        if (response.getStatus() != 200) {
-          return response.getStatus();
-        }
-      } catch (IOException ex) {
-        log.error(CONNECTION_FAILURE_LOG, ex);
-        return 0;
-      } catch (InvalidServerAnswer ex) {
-        log.error(INVALID_SERVER_ANSWER_LOG, ex);
-        return 602;
-      }
+      future = future
+          .thenWeaklySupplyAsync(() -> serverClient.desertChat(chatId, otherUsername))
+          .thenWeaklyConsumeAsync(response -> throwTransportIfStatusNotOk(response.getStatus()));
     }
 
-    chatManager.deleteChat(chatId);
-    return 200;
+    return future
+        .thenWeaklyRunAsync(() -> chatManager.deleteChat(chatId))
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public int processChatDestroying() {
+  public ChainableFuture<Integer> processChatDestroying() {
     String chatId = chatManager.getActiveChatId();
     String otherUsername = chatManager.getActiveChatOtherUsername();
     boolean isActiveChatAboutToDelete = chatManager.isActiveChatAboutToDelete();
     if (chatId == null || otherUsername == null) {
       log.error("Tried to destroy chat when there no active chats");
-      return 601;
+      return ChainableFuture.supplyWeaklyAsync(() -> 601);
     }
 
+    ChainableFuture<?> future = ChainableFuture.getCompleted();
     if (!isActiveChatAboutToDelete) {
-      try {
-        NoPayloadResponse response = serverClient.destroyChat(chatId, otherUsername);
-        if (response.getStatus() != 200) {
-          return response.getStatus();
-        }
-      } catch (IOException ex) {
-        log.error(CONNECTION_FAILURE_LOG, ex);
-        return 0;
-      } catch (InvalidServerAnswer ex) {
-        log.error(INVALID_SERVER_ANSWER_LOG, ex);
-        return 602;
-      }
+      future = future
+          .thenWeaklySupplyAsync(() -> serverClient.destroyChat(chatId, otherUsername))
+          .thenWeaklyConsumeAsync(response -> throwTransportIfStatusNotOk(response.getStatus()));
     }
 
-    chatManager.deleteChat(chatId);
-    return 200;
+    return future
+        .thenWeaklyRunAsync(() -> chatManager.deleteChat(chatId))
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public int processChatRequest(String chatId, String otherUsername) {
+  public ChainableFuture<Integer> processChatRequest(String chatId, String otherUsername) {
     if (dh == null) {
       log.error(DIFFIE_HELLMAN_NOT_INIT_LOG);
-      return 601;
+      return ChainableFuture.supplyWeaklyAsync(() -> 601);
     }
     BigInteger privateKey = dh.generatePrivateKey(DH_PRIVATE_KEY_BIT_LENGTH);
     BigInteger publicKey = dh.generatePublicKey(privateKey);
 
-    try {
-      NoPayloadResponse response = serverClient
-          .requestChatConnection(chatId, otherUsername, publicKey.toString());
-      if (response.getStatus() != 200) {
-        return response.getStatus();
-      }
-    } catch (IOException ex) {
-      log.error(CONNECTION_FAILURE_LOG, ex);
-      return 0;
-    } catch (InvalidServerAnswer ex) {
-      log.error(INVALID_SERVER_ANSWER_LOG, ex);
-      return 602;
-    }
-
-    chatManager.createOrReconnectOnRequesterSide(chatId, otherUsername, privateKey);
-    return 200;
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> serverClient
+            .requestChatConnection(chatId, otherUsername, publicKey.toString()))
+        .thenWeaklyConsumeAsync(response -> throwTransportIfStatusNotOk(response.getStatus()))
+        .thenWeaklyRunAsync(() -> chatManager
+            .createOrReconnectOnRequesterSide(chatId, otherUsername, privateKey))
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public int processChatAcceptance(String chatId, String otherUsername) {
+  public ChainableFuture<Integer> processChatAcceptance(String chatId, String otherUsername) {
     if (dh == null) {
       log.error(DIFFIE_HELLMAN_NOT_INIT_LOG);
-      return 601;
+      return ChainableFuture.supplyWeaklyAsync(() -> 601);
     }
     BigInteger privateKey = dh.generatePrivateKey(DH_PRIVATE_KEY_BIT_LENGTH);
     BigInteger publicKey = dh.generatePublicKey(privateKey);
+    UnaryOperator<BigInteger> generator = otherPublicKey -> dh
+        .generateSessionKey(privateKey, otherPublicKey);
 
-    try {
-      NoPayloadResponse response = serverClient
-          .acceptChatConnection(chatId, otherUsername, publicKey.toString());
-      if (response.getStatus() != 200) {
-        return response.getStatus();
-      }
-    } catch (IOException ex) {
-      log.error(CONNECTION_FAILURE_LOG, ex);
-      return 0;
-    } catch (InvalidServerAnswer ex) {
-      log.error(INVALID_SERVER_ANSWER_LOG, ex);
-      return 602;
-    }
-
-    UnaryOperator<BigInteger> generator = otherPublicKey -> dh.generateSessionKey(privateKey, otherPublicKey);
-    chatManager.acceptChat(chatId, otherUsername, generator);
-    return 200;
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> serverClient
+            .acceptChatConnection(chatId, otherUsername, publicKey.toString()))
+        .thenWeaklyConsumeAsync(response -> throwTransportIfStatusNotOk(response.getStatus()))
+        .thenWeaklyRunAsync(() -> chatManager.acceptChat(chatId, otherUsername, generator))
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public int processChatDisconnect(String chatId, String otherUsername) {
-    try {
-      NoPayloadResponse response = serverClient.breakChatConnection(chatId, otherUsername);
-      if (response.getStatus() != 200) {
-        return response.getStatus();
-      }
-    } catch (IOException ex) {
-      log.error(CONNECTION_FAILURE_LOG, ex);
-      return 0;
-    } catch (InvalidServerAnswer ex) {
-      log.error(INVALID_SERVER_ANSWER_LOG, ex);
-      return 602;
+  public ChainableFuture<Integer> processChatDisconnect(String chatId, String otherUsername) {
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> serverClient.breakChatConnection(chatId, otherUsername))
+        .thenWeaklyConsumeAsync(response -> throwTransportIfStatusNotOk(response.getStatus()))
+        .thenWeaklyRunAsync(() -> chatManager.disconnectChat(chatId, otherUsername))
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(defaultHandler);
+  }
+
+  public ChainableFuture<Integer> processSendingMessage(String messageText) {
+    String chatId = chatManager.getActiveChatId();
+    String otherUsername = chatManager.getActiveChatOtherUsername();
+
+    byte[] data = messageText.getBytes();
+    if (data.length > 256) {
+      // TODO: handle
+      throw  new RuntimeException("TOO LARGE MESSAGE");
     }
 
-    chatManager.disconnectChat(chatId, otherUsername);
-    return 200;
+    var cryptoSystem = new DES(Bits.split(0x99f89813981141L, 7));
+    var cryptoContext = new SymmetricCryptoContext(cryptoSystem, Padding.PKCS7, BlockCipherMode.ECB);
+    Message message = new Message(messageText, serverClient.getUsername(), true);
+    MessageEntry messageEntry = chatManager.insertMessage(chatId, message);
+
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> {
+          CryptoProgress<byte[]> progress = cryptoContext.encryptAsync(data);
+          messageEntry.startEncrypting(progress);
+          return progress.getResult();
+        })
+        .thenWeaklySupplyAsync(() -> 200)
+        .thenWeaklyHandleAsync(ex -> {
+          log.error("Some ex", ex);
+          return 600;
+        });
+//
+//
+//        .supplyWeaklyAsync(() -> serverClient.breakChatConnection(chatId, otherUsername))
+//        .thenWeaklyConsumeAsync(response -> throwTransportIfStatusNotOk(response.getStatus()))
+//        .thenWeaklyRunAsync(() -> FxUtil.runOnFxThread(() -> chatManager
+//            .disconnectChat(chatId, otherUsername)))
+//        .thenWeaklySupplyAsync(() -> 200)
+//        .thenWeaklyHandleAsync(defaultHandler);
   }
 
 
@@ -376,10 +402,12 @@ public class ApplicationStateManager {
       loginScene = new Scene(root);
     }
 
-    stage.setScene(loginScene);
-    stage.setResizable(false);
-    stage.show();
-    centerStage();
+    FxUtil.runOnFxThread(() -> {
+      stage.setScene(loginScene);
+      stage.setResizable(false);
+      stage.show();
+      centerStage();
+    });
   }
 
   private void showMainScene() {
@@ -390,17 +418,25 @@ public class ApplicationStateManager {
       mainScene = new Scene(root);
     }
 
-    stage.setScene(mainScene);
-    stage.setMinWidth(460.0);
-    stage.setMinHeight(300.0);
-    stage.setResizable(true);
-    stage.show();
-    centerStage();
+    FxUtil.runOnFxThread(() -> {
+      stage.setScene(mainScene);
+      stage.setMinWidth(460.0);
+      stage.setMinHeight(300.0);
+      stage.setResizable(true);
+      stage.show();
+      centerStage();
+    });
   }
 
   private void centerStage() {
     Rectangle2D primScreenBounds = Screen.getPrimary().getVisualBounds();
     stage.setX((primScreenBounds.getWidth() - stage.getWidth()) / 2);
     stage.setY((primScreenBounds.getHeight() - stage.getHeight()) / 2);
+  }
+
+  private void throwTransportIfStatusNotOk(int status) {
+    if (status != 200) {
+      throw new ChainTransportIntException(status);
+    }
   }
 }

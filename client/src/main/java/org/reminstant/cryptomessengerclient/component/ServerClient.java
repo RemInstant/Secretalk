@@ -27,6 +27,8 @@ public class ServerClient {
 
   private static final String CONTENT_TYPE_HEADER = "Content-Type";
   private static final String CONTENT_TYPE_HEADER_APPLICATION_JSON = "application/json";
+
+  private static final Duration STANDARD_TIMEOUT = Duration.ofSeconds(5);
   
   private static final HttpClient httpClient = HttpClient.newHttpClient();
   private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -44,18 +46,21 @@ public class ServerClient {
         .uri(URI.create("http://localhost:8080/api/auth/login"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BASIC + base64data)
         .POST(HttpRequest.BodyPublishers.noBody())
-        .build(), JwtResponse.class);
+        .build(), null, JwtResponse.class);
   }
 
   public NoPayloadResponse processRegister(String login, String password) throws IOException, InvalidServerAnswer {
-    Map<String, String> data = Map.of("username", login, "password", password);
+    Map<String, Object> data = Map.of(
+        "username", login,
+        "password", password);
     String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/auth/register"))
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .build(), NoPayloadResponse.class);
+        .timeout(STANDARD_TIMEOUT)
+        .build(), data, NoPayloadResponse.class);
   }
 
   public void saveCredentials(String username, String jwtToken) {
@@ -74,7 +79,7 @@ public class ServerClient {
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/get-dh-params"))
         .GET()
-        .build(), DHResponse.class);
+        .build(), null, DHResponse.class);
   }
 
 
@@ -85,56 +90,60 @@ public class ServerClient {
             .formatted(timeoutMillis)))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .GET()
-        .build(), UserEventWrapperResponse.class);
+        .build(), null, UserEventWrapperResponse.class);
   }
 
   public NoPayloadResponse acknowledgeEvent(String eventId) throws IOException, InvalidServerAnswer {
-    String json = objectMapper.writeValueAsString(Map.of("eventId", eventId));
+    Map<String, Object> data = Map.of("eventId", eventId);
+    String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/ack-event"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .build(), NoPayloadResponse.class);
+        .build(), data, NoPayloadResponse.class);
   }
 
 
 
   public NoPayloadResponse desertChat(String chatId, String otherUsername)
       throws IOException, InvalidServerAnswer {
-    String json = objectMapper.writeValueAsString(Map.of(
+    Map<String, Object> data = Map.of(
         "chatId", chatId,
-        "otherUsername", otherUsername));
+        "otherUsername", otherUsername);
+    String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/desert-chat"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .build(), UserEventWrapperResponse.class);
+        .build(), data, UserEventWrapperResponse.class);
   }
 
   public NoPayloadResponse destroyChat(String chatId, String otherUsername)
       throws IOException, InvalidServerAnswer {
-    String json = objectMapper.writeValueAsString(Map.of(
+    Map<String, Object> data = Map.of(
         "chatId", chatId,
-        "otherUsername", otherUsername));
+        "otherUsername", otherUsername);
+    String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/destroy-chat"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .build(), UserEventWrapperResponse.class);
+        .build(), data, UserEventWrapperResponse.class);
   }
 
   public NoPayloadResponse requestChatConnection(String chatId, String otherUsername, String publicKey)
       throws IOException, InvalidServerAnswer {
-    String json = objectMapper.writeValueAsString(Map.of(
+    Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername,
-        "publicKey", publicKey));
+        "publicKey", publicKey);
+    String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/request-chat-connection"))
@@ -142,48 +151,70 @@ public class ServerClient {
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
         .timeout(Duration.ofMillis(1000))
-        .build(), UserEventWrapperResponse.class);
+        .build(), data, UserEventWrapperResponse.class);
   }
 
   public NoPayloadResponse acceptChatConnection(String chatId, String otherUsername, String publicKey)
       throws IOException, InvalidServerAnswer {
-    String json = objectMapper.writeValueAsString(Map.of(
+    Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername,
-        "publicKey", publicKey));
+        "publicKey", publicKey);
+    String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/accept-chat-connection"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .build(), UserEventWrapperResponse.class);
+        .build(), data, UserEventWrapperResponse.class);
   }
 
   public NoPayloadResponse breakChatConnection(String chatId, String otherUsername)
       throws IOException, InvalidServerAnswer {
-    String json = objectMapper.writeValueAsString(Map.of(
+    Map<String, Object> data = Map.of(
         "chatId", chatId,
-        "otherUsername", otherUsername));
+        "otherUsername", otherUsername);
+    String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/break-chat-connection"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .build(), UserEventWrapperResponse.class);
+        .build(), data, UserEventWrapperResponse.class);
+  }
+
+  public NoPayloadResponse sendChatMessage(String chatId, String otherUsername,
+                                           int messageSize, byte[] messageData)
+      throws IOException, InvalidServerAnswer {
+    Map<String, Object> data = Map.of(
+        "chatId", chatId,
+        "otherUsername", otherUsername,
+        "messageSize", messageSize,
+        "messageData", messageData);
+    String json = objectMapper.writeValueAsString(data);
+
+    return sendRequest(HttpRequest.newBuilder()
+        .uri(URI.create("http://localhost:8080/api/chat/send-chat-message"))
+        .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
+        .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
+        .POST(HttpRequest.BodyPublishers.ofString(json))
+        .build(), data, UserEventWrapperResponse.class);
   }
 
 
 
-  private <T> T sendRequest(HttpRequest request, Class<T> c) throws IOException, InvalidServerAnswer {
+  private <T> T sendRequest(HttpRequest request, Map<String, Object> data, Class<T> c)
+      throws IOException, InvalidServerAnswer {
     HttpResponse<String> response = null;
     try {
+      log.debug("send {} {} | body: {}", request.method(), request.uri(), data);
       response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-      log.debug("{} {} - code {} | body: {}", request.method(), request.uri(),
+      log.debug("get {} {} - code {} | body: {}", request.method(), request.uri(),
           response.statusCode(), response.body());
     } catch (InterruptedException ex) {
-      log.error("Unexpected interruption", ex);
+      log.debug("{} {} - cancelled", request.method(), request.uri());
       Thread.currentThread().interrupt();
     }
 

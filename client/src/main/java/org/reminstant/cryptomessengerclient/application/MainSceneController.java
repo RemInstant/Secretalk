@@ -11,10 +11,9 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import net.rgielen.fxweaver.core.FxmlView;
+import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.cryptomessengerclient.application.control.ExpandableTextArea;
-import org.reminstant.cryptomessengerclient.application.control.MessageEntry;
 import org.reminstant.cryptomessengerclient.application.control.NotificationLabel;
-import org.reminstant.cryptomessengerclient.model.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -43,6 +42,8 @@ public class MainSceneController implements Initializable {
   private ImageView addChatButton;
   @FXML
   private ImageView deleteChatButton;
+  @FXML
+  private ImageView sendButton;
 
   @FXML
   private ScrollPane chatHolderScroll;
@@ -94,13 +95,14 @@ public class MainSceneController implements Initializable {
     settingsButton.setOnMouseClicked(this::onSettingsButtonClicked);
     addChatButton.setOnMouseClicked(this::onAddChatButtonClicked);
     deleteChatButton.setOnMouseClicked(this::onAddDeleteButtonClicked);
+    sendButton.setOnMouseClicked(this::onSendMessageButtonClicked);
 
     shadow.setOnMouseClicked(this::onShadowClicked);
     chatCreatingButton.setOnMouseClicked(this::onChatCreatingButtonClicked);
     chatCreatingCancelButton.setOnMouseClicked(this::onChatCreatingCancelButtonClicked);
     chatSelfDeletionButton.setOnMouseClicked(this::onChatSelfDeletionButtonClicked);
     chatDeletionButton.setOnMouseClicked(this::onChatDeletionButtonClicked);
-    chatDeletionCancelButton.setOnMouseClicked(this::onChatDeletionButtonCancelClicked);
+    chatDeletionCancelButton.setOnMouseClicked(this::onChatDeletionCancelButtonClicked);
 
     rightBlock.getChildren().forEach(node -> node.setVisible(false));
 
@@ -138,35 +140,64 @@ public class MainSceneController implements Initializable {
   }
 
   private void processChatDeserting() {
-    int status = stateManager.processChatDeserting();
-    if (status == 200) {
-      closeChatDeletionBlock();
-    } else {
-//      String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
-//      chatCreationNotificationLabel.showError(desc);
-    }
+    stateManager.processChatDeserting()
+        .thenWeaklyConsumeAsync(status -> {
+          if (status == 200) {
+            FxUtil.runOnFxThread(this::closeChatDeletionBlock);
+          } else {
+            // TODO: deletion error displaying
+//            String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
+//            chatCreationNotificationLabel.showError(desc);
+          }
+        });
   }
 
   private void processChatDestroying() {
-    int status = stateManager.processChatDestroying();
-    if (status == 200) {
-      closeChatDeletionBlock();
-    } else {
-//      String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
-//      chatCreationNotificationLabel.showError(desc);
-    }
+    stateManager.processChatDestroying()
+        .thenWeaklyConsumeAsync(status -> {
+          if (status == 200) {
+            FxUtil.runOnFxThread(this::closeChatDeletionBlock);
+          } else {
+            // TODO: deletion error displaying
+//            String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
+//            chatCreationNotificationLabel.showError(desc);
+          }
+        });
   }
 
   private void processChatCreating() {
     String otherUsername = chatCreatingUsernameField.getText();
 
-    int status = stateManager.processChatCreation(otherUsername);
-    if (status == 200) {
-      closeChatCreatingBlock();
-    } else {
-      String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
-      chatCreationNotificationLabel.showError(desc);
+    stateManager.processChatCreation(otherUsername)
+        .thenWeaklyConsumeAsync(status -> {
+          if (status == 200) {
+            FxUtil.runOnFxThread(this::closeChatCreatingBlock);
+          } else {
+            FxUtil.runOnFxThread(() -> {
+              String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
+              chatCreationNotificationLabel.showError(desc);
+            });
+          }
+        });
+  }
+
+  private void processSendingMessage() {
+    String messageText = messageInput.getText();
+    if (messageText == null || messageText.isEmpty()) {
+      return;
     }
+
+    stateManager.processSendingMessage(messageText)
+        .thenWeaklyConsumeAsync(status -> {
+          if (status == 200) {
+            FxUtil.runOnFxThread(() -> {
+              messageInput.clear();
+              ConcurrentUtil.sleepSafely(100);
+            });
+          } else {
+            // TODO: handle
+          }
+        });
   }
 
 
@@ -220,9 +251,15 @@ public class MainSceneController implements Initializable {
     }
   }
 
-  private void onChatDeletionButtonCancelClicked(MouseEvent e) {
+  private void onChatDeletionCancelButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       closeChatDeletionBlock();
+    }
+  }
+
+  private void onSendMessageButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      processSendingMessage();
     }
   }
 }

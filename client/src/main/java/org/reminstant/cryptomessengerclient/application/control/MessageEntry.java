@@ -3,7 +3,6 @@ package org.reminstant.cryptomessengerclient.application.control;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.css.PseudoClass;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.layout.HBox;
@@ -12,7 +11,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import lombok.Getter;
 import org.reminstant.concurrent.ChainableFuture;
-import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.cryptography.context.CryptoProgress;
 import org.reminstant.cryptomessengerclient.model.Message;
 
@@ -72,7 +70,7 @@ public class MessageEntry extends HBox {
 
   private void trackProgress(CryptoProgress<?> progress) {
     Objects.requireNonNull(progress, "progress cannot be null");
-    ChainableFuture.executeStronglyAsync(() -> {
+    ChainableFuture.runStronglyAsync(() -> {
       while (!progress.isDone()) {
         Platform.runLater(() -> progressBar.setProgress(progress.getProgress()));
         Thread.sleep(200);

@@ -136,55 +136,55 @@ public final class SymmetricCryptoContext {
   // TODO: perhaps public methods need javadoc
   public CryptoProgress<byte[]> encryptAsync(byte[] message) {
     CryptoProgress<byte[]> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture.executeStronglyAsync(() -> encryptInternal(message, progress)));
+    progress.setFuture(ChainableFuture.supplyWeaklyAsync(() -> encryptInternal(message, progress)));
     return progress;
   }
 
   public CryptoProgress<byte[]> encryptAsync(String inputFilename) {
     CryptoProgress<byte[]> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture.executeStronglyAsync(() -> encryptInternal(inputFilename, progress)));
+    progress.setFuture(ChainableFuture.supplyWeaklyAsync(() -> encryptInternal(inputFilename, progress)));
     return progress;
   }
 
   public CryptoProgress<Void> encryptAsync(byte[] message, String outputFilename) {
     CryptoProgress<Void> progress = new CryptoProgress<>();
     progress.setFuture(ChainableFuture
-        .executeStronglyAsync(() -> encryptInternal(message, outputFilename, progress)));
+        .runWeaklyAsync(() -> encryptInternal(message, outputFilename, progress)));
     return progress;
   }
 
   public CryptoProgress<Void> encryptAsync(String inputFilename, String outputFilename) {
     CryptoProgress<Void> progress = new CryptoProgress<>();
     progress.setFuture(ChainableFuture
-        .executeStronglyAsync(() -> encryptInternal(inputFilename, outputFilename, progress)));
+        .runWeaklyAsync(() -> encryptInternal(inputFilename, outputFilename, progress)));
     return progress;
   }
 
   public CryptoProgress<byte[]> decryptAsync(byte[] cipher) {
     CryptoProgress<byte[]> progress = new CryptoProgress<>();
     progress.setFuture(ChainableFuture
-        .executeStronglyAsync(() -> decryptInternal(cipher, progress)));
+        .supplyWeaklyAsync(() -> decryptInternal(cipher, progress)));
     return progress;
   }
 
   public CryptoProgress<byte[]> decryptAsync(String inputFilename) {
     CryptoProgress<byte[]> progress = new CryptoProgress<>();
     progress.setFuture(ChainableFuture
-        .executeStronglyAsync(() -> decryptInternal(inputFilename, progress)));
+        .supplyWeaklyAsync(() -> decryptInternal(inputFilename, progress)));
     return progress;
   }
 
   public CryptoProgress<Void> decryptAsync(byte[] message, String outputFilename) {
     CryptoProgress<Void> progress = new CryptoProgress<>();
     progress.setFuture(ChainableFuture
-        .executeStronglyAsync(() -> decryptInternal(message, outputFilename, progress)));
+        .runWeaklyAsync(() -> decryptInternal(message, outputFilename, progress)));
     return progress;
   }
 
   public CryptoProgress<Void> decryptAsync(String inputFilename, String outputFilename) {
     CryptoProgress<Void> progress = new CryptoProgress<>();
     progress.setFuture(ChainableFuture
-        .executeStronglyAsync(() -> decryptInternal(inputFilename, outputFilename, progress)));
+        .runWeaklyAsync(() -> decryptInternal(inputFilename, outputFilename, progress)));
     return progress;
   }
 
@@ -695,7 +695,7 @@ public final class SymmetricCryptoContext {
         }, executor))
         .toList();
 
-    ChainableFuture<Void> awaiter = ChainableFuture.awaitAllStronglyAsync(tasks, executor);
+    ChainableFuture<Void> awaiter = ChainableFuture.awaitAllWeaklyAsync(tasks, executor);
     try {
       awaiter.waitCompletion();
     } catch (InterruptedException e) {

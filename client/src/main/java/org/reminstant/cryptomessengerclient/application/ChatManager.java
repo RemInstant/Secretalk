@@ -1,6 +1,5 @@
 package org.reminstant.cryptomessengerclient.application;
 
-import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -11,6 +10,8 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import lombok.extern.slf4j.Slf4j;
+import org.reminstant.concurrent.ChainableFuture;
+import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.cryptomessengerclient.application.control.MessageEntry;
 import org.reminstant.cryptomessengerclient.application.control.SecretChatEntry;
 import org.reminstant.cryptomessengerclient.model.Message;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.ToIntFunction;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 @Slf4j
@@ -90,9 +91,9 @@ public class ChatManager {
 
   public void initBehaviour(Runnable onChatOpening,
                             Runnable onChatClosing,
-                            ToIntFunction<SecretChat> onChatRequest,
-                            ToIntFunction<SecretChat> onChatAccept,
-                            ToIntFunction<SecretChat> onChatDisconnect) {
+                            Function<SecretChat, ChainableFuture<Integer>> onChatRequest,
+                            Function<SecretChat, ChainableFuture<Integer>> onChatAccept,
+                            Function<SecretChat, ChainableFuture<Integer>> onChatDisconnect) {
     Button acceptChatButton = findButtonByState(SecretChat.State.AWAITING);
     Button disconnectChatButton = findButtonByState(SecretChat.State.CONNECTED);
     Button requestChatButton = findButtonByState(SecretChat.State.DISCONNECTED);
@@ -114,11 +115,11 @@ public class ChatManager {
 
     Map<Button, Runnable> buttonHandlers = Map.of(
         acceptChatButton,
-        constructHandlerForStateButton(onChatAccept, "FAILED TO ACCEPT"),
+        getHandlerForStateButton(onChatAccept, "FAILED TO ACCEPT"),
         disconnectChatButton,
-        constructHandlerForStateButton(onChatDisconnect, "FAILED TO DISCONNECT"),
+        getHandlerForStateButton(onChatDisconnect, "FAILED TO DISCONNECT"),
         requestChatButton,
-        constructHandlerForStateButton(onChatRequest, "FAILED TO REQUEST")
+        getHandlerForStateButton(onChatRequest, "FAILED TO REQUEST")
     );
 
     for (var entry : buttonHandlers.entrySet()) {
@@ -180,7 +181,8 @@ public class ChatManager {
       return;
     }
 
-    chatEntry.setConnectedState(sessionKeyGenerator.apply(chatEntry.getSecretChat().getKey()));
+    FxUtil.runOnFxThread(() -> chatEntry
+        .setConnectedState(sessionKeyGenerator.apply(chatEntry.getSecretChat().getKey())));
     log.info("Established connection to chat: {}", chatEntry.getSecretChat());
   }
 
@@ -195,7 +197,7 @@ public class ChatManager {
       return;
     }
 
-    chatEntry.setDisconnectedState();
+    FxUtil.runOnFxThread(chatEntry::setDisconnectedState);
     log.info("Broke connection to chat: {}", chatEntry.getSecretChat());
   }
 
@@ -210,7 +212,7 @@ public class ChatManager {
       return;
     }
 
-    chatEntry.setDesertedState();
+    FxUtil.runOnFxThread(chatEntry::setDesertedState);
     log.info("Chat turned deserted: {}", chatEntry.getSecretChat());
   }
 
@@ -225,7 +227,7 @@ public class ChatManager {
       return;
     }
 
-    chatEntry.setDestroyedState();
+    FxUtil.runOnFxThread(chatEntry::setDestroyedState);
     log.info("Destroyed chat: {}", chatEntry.getSecretChat());
   }
 
@@ -236,35 +238,47 @@ public class ChatManager {
       return;
     }
 
-    activeChat.set(null);
     String idToDelete = chatEntry.getSecretChat().getId();
-
-    runOnFxThread(() -> chatHolder.getChildren().removeIf(node ->
-        node instanceof SecretChatEntry entry &&
-        entry.getSecretChat().getId().equals(idToDelete)));
+    FxUtil.runOnFxThread(() -> {
+      activeChat.set(null);
+      chatHolder.getChildren().removeIf(node -> node instanceof SecretChatEntry entry &&
+          entry.getSecretChat().getId().equals(idToDelete));
+    });
 
     secretChatEntries.remove(chatEntry.getSecretChat().getId());
     log.info("Deleted chat: {}", chatEntry.getSecretChat());
   }
 
-  public void insertMessage(String chatId, Message message) {
+  public MessageEntry insertMessage(String chatId, Message message) {
     if (!secretChatEntries.containsKey(chatId)) {
       log.error("Tried to insert message into non-existent chat");
-      return;
+      return null;
     }
 
+    MessageEntry messageEntry = new MessageEntry(message);
     VBox messageHolder = messageHolders.get(chatId);
-    runOnFxThread(() -> messageHolder.getChildren().add(new MessageEntry(message)));
+    FxUtil.runOnFxThread(() -> {
+      messageHolder.getChildren().add(messageEntry);
+    });
+    ChainableFuture.runWeaklyAsync(() -> {
+      ConcurrentUtil.sleepSafely(200);
+      FxUtil.runOnFxThread(() -> {
+        if (activeChat.get() != null && activeChat.get().getSecretChat().getId().equals(chatId)) {
+          messageHolderWrapper.setVvalue(1);
+        }
+      });
+    });
+    return messageEntry;
   }
 
   public void insertMessages(String chatId, Collection<Message> messages) {
     if (!secretChatEntries.containsKey(chatId)) {
-      log.error("Tried to insert message into non-existent chat");
+      log.error("Tried to insert messages into non-existent chat");
       return;
     }
 
     VBox messageHolder = messageHolders.get(chatId);
-    runOnFxThread(() -> messageHolder.getChildren().addAll(
+    FxUtil.runOnFxThread(() -> messageHolder.getChildren().addAll(
         messages.stream().map(MessageEntry::new).toList()));
   }
 
@@ -297,7 +311,7 @@ public class ChatManager {
     });
 
     SecretChatEntry finalChatEntry = chatEntry;
-    runOnFxThread(() -> {
+    FxUtil.runOnFxThread(() -> {
       chatHolder.getChildren().add(finalChatEntry);
       finalChatEntry.setOnMouseClicked(this::onSecretChatEntryClicked);
       messageHolder.getStyleClass().add("messageHolder");
@@ -320,24 +334,18 @@ public class ChatManager {
         .findAny().orElse(null);
   }
 
-  private Runnable constructHandlerForStateButton(ToIntFunction<SecretChat> rawHandler, String errorMessage) {
+  private Runnable getHandlerForStateButton(Function<SecretChat, ChainableFuture<Integer>> rawHandler,
+                                            String errorMessage) {
     if (rawHandler == null) {
       return () -> {};
     }
-    return () -> {
-      int status = rawHandler.applyAsInt(activeChat.get().getSecretChat());
-      if (status != 200) {
-        log.error("{}: code {}", errorMessage, status);
-      }
-    };
-  }
-
-  private void runOnFxThread(Runnable runnable) {
-    if (Platform.isFxApplicationThread()) {
-      runnable.run();
-    } else {
-      Platform.runLater(runnable);
-    }
+    return () -> rawHandler.apply(activeChat.get().getSecretChat())
+        .thenWeaklyConsumeAsync(status -> FxUtil.runOnFxThread(() -> {
+          // TODO: notification
+          if (status != 200) {
+            log.error("{}: code {}", errorMessage, status);
+          }
+        }));
   }
 
   private void throwIfUninitialised() {

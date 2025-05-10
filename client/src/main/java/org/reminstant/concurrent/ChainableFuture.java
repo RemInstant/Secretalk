@@ -1,5 +1,7 @@
 package org.reminstant.concurrent;
 
+import org.reminstant.concurrent.functions.*;
+
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -8,6 +10,8 @@ import java.util.function.*;
 public class ChainableFuture<V> implements Future<V> {
 
   private static final ExecutorService DEFAULT_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
+  private static final ChainableFuture<Void> COMPLETED_VOID_INSTANCE =
+      new ChainableFuture<>(DEFAULT_EXECUTOR, () -> null, true);
 
   private final ExecutorService executor;
 
@@ -16,58 +20,44 @@ public class ChainableFuture<V> implements Future<V> {
   private final Set<ChainableFuture<?>> parentTasks;
   private final AtomicInteger childrenCount;
   
+
+
+  public static ChainableFuture<Void> getCompleted() {
+    return COMPLETED_VOID_INSTANCE;
+  }
+
+
+  public static ChainableFuture<Void> runStronglyAsync(ThrowingRunnable runnable) {
+    return supplyStronglyAsync(ThrowingFunctions.toSupplier(runnable));
+  }
+
+  public static ChainableFuture<Void> runWeaklyAsync(ThrowingRunnable runnable) {
+    return supplyWeaklyAsync(ThrowingFunctions.toSupplier(runnable));
+  }
+
+  public static ChainableFuture<Void> runWeaklyAsync(ThrowingRunnable runnable, ExecutorService executor) {
+    return supplyStronglyAsync(ThrowingFunctions.toSupplier(runnable), executor);
+  }
+
+  public static ChainableFuture<Void> runStronglyAsync(ThrowingRunnable runnable, ExecutorService executor) {
+    return supplyWeaklyAsync(ThrowingFunctions.toSupplier(runnable), executor);
+  }
   
   
-  public static ChainableFuture<Void> runStronglyAsync(Runnable runnable) {
-    return executeStronglyAsync(Executors.callable(runnable, null));
+  public static <V> ChainableFuture<V> supplyStronglyAsync(ThrowingSupplier<V> supplier) {
+    return new ChainableFuture<>(DEFAULT_EXECUTOR, supplier, true);
   }
 
-  public static ChainableFuture<Void> runWeaklyAsync(Runnable runnable) {
-    return executeWeaklyAsync(Executors.callable(runnable, null));
-  }
-  
-  public static ChainableFuture<Void> runStronglyAsync(Runnable runnable, ExecutorService executor) {
-    return executeStronglyAsync(Executors.callable(runnable, null), executor);
+  public static <V> ChainableFuture<V> supplyWeaklyAsync(ThrowingSupplier<V> supplier) {
+    return new ChainableFuture<>(DEFAULT_EXECUTOR, supplier, false);
   }
 
-  public static ChainableFuture<Void> runWeaklyAsync(Runnable runnable, ExecutorService executor) {
-    return executeWeaklyAsync(Executors.callable(runnable, null), executor);
+  public static <V> ChainableFuture<V> supplyStronglyAsync(ThrowingSupplier<V> supplier, ExecutorService executor) {
+    return new ChainableFuture<>(executor, supplier, true);
   }
 
-
-
-  public static ChainableFuture<Void> executeStronglyAsync(ThrowingRunnable runnable) {
-    return executeStronglyAsync(ThrowingRunnable.toCallable(runnable));
-  }
-
-  public static ChainableFuture<Void> executeWeaklyAsync(ThrowingRunnable runnable) {
-    return executeWeaklyAsync(ThrowingRunnable.toCallable(runnable));
-  }
-
-  public static ChainableFuture<Void> executeWeaklyAsync(ThrowingRunnable runnable, ExecutorService executor) {
-    return executeStronglyAsync(ThrowingRunnable.toCallable(runnable), executor);
-  }
-
-  public static ChainableFuture<Void> executeStronglyAsync(ThrowingRunnable runnable, ExecutorService executor) {
-    return executeWeaklyAsync(ThrowingRunnable.toCallable(runnable), executor);
-  }
-
-  
-  
-  public static <V> ChainableFuture<V> executeStronglyAsync(Callable<V> callable) {
-    return new ChainableFuture<>(DEFAULT_EXECUTOR, callable, true);
-  }
-
-  public static <V> ChainableFuture<V> executeWeaklyAsync(Callable<V> callable) {
-    return new ChainableFuture<>(DEFAULT_EXECUTOR, callable, false);
-  }
-
-  public static <V> ChainableFuture<V> executeStronglyAsync(Callable<V> callable, ExecutorService executor) {
-    return new ChainableFuture<>(executor, callable, true);
-  }
-
-  public static <V> ChainableFuture<V> executeWeaklyAsync(Callable<V> callable, ExecutorService executor) {
-    return new ChainableFuture<>(executor, callable, false);
+  public static <V> ChainableFuture<V> supplyWeaklyAsync(ThrowingSupplier<V> supplier, ExecutorService executor) {
+    return new ChainableFuture<>(executor, supplier, false);
   }
 
 
@@ -91,9 +81,9 @@ public class ChainableFuture<V> implements Future<V> {
 
 
 
-  private ChainableFuture(ExecutorService executor, Callable<V> callable, boolean isStrong) {
+  private ChainableFuture(ExecutorService executor, ThrowingSupplier<V> supplier, boolean isStrong) {
     this.executor = executor;
-    this.currentTask = executor.submit(callable);
+    this.currentTask = executor.submit(supplier::get);
     this.isStrong = isStrong;
     this.parentTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
     this.childrenCount = new AtomicInteger(0);
@@ -101,43 +91,61 @@ public class ChainableFuture<V> implements Future<V> {
 
   
   
-  public <U> ChainableFuture<U> thenStronglyMapAsync(Function<? super V, U> mapping) {
+  public <U> ChainableFuture<U> thenStronglyMapAsync(ThrowingFunction<? super V, U> mapping) {
     return thenMapAsync(mapping, true, executor);
   }
 
-  public <U> ChainableFuture<U> thenWeaklyMapAsync(Function<? super V, U> mapping) {
+  public <U> ChainableFuture<U> thenWeaklyMapAsync(ThrowingFunction<? super V, U> mapping) {
     return thenMapAsync(mapping, false, executor);
   }
 
-  public ChainableFuture<Void> thenStronglyRunAsync(Runnable runnable) {
-    Function<V, Void> mapping = _ -> {
+  public ChainableFuture<Void> thenStronglyRunAsync(ThrowingRunnable runnable) {
+    ThrowingFunction<V, Void> mapping = _ -> {
       runnable.run();
       return null;
     };
     return thenMapAsync(mapping, true, executor);
   }
 
-  public ChainableFuture<Void> thenWeaklyRunAsync(Runnable runnable) {
-    Function<V, Void> mapping = _ -> {
+  public ChainableFuture<Void> thenWeaklyRunAsync(ThrowingRunnable runnable) {
+    ThrowingFunction<V, Void> mapping = _ -> {
       runnable.run();
       return null;
     };
     return thenMapAsync(mapping, false, executor);
   }
 
-//  public ChainableFuture<Void> thenStronglyExecuteAsync(ThrowingRunnable runnable) {
-//    return thenMapAsync(mapping, true, executor);
-//  }
-//
-//  public ChainableFuture<Void> thenWeaklyExecuteAsync(ThrowingRunnable runnable) {
-//    return thenMapAsync(mapping, false, executor);
-//  }
+  public ChainableFuture<Void> thenStronglyConsumeAsync(ThrowingConsumer<V> consumer) {
+    ThrowingFunction<V, Void> mapping = value -> {
+      consumer.accept(value);
+      return null;
+    };
+    return thenMapAsync(mapping, true, executor);
+  }
 
-  public ChainableFuture<V> thenStronglyHandleAsync(Function<? super Throwable, V> handler) {
+  public ChainableFuture<Void> thenWeaklyConsumeAsync(ThrowingConsumer<V> consumer) {
+    ThrowingFunction<V, Void> mapping = value -> {
+      consumer.accept(value);
+      return null;
+    };
+    return thenMapAsync(mapping, false, executor);
+  }
+
+  public <U> ChainableFuture<U> thenStronglySupplyAsync(ThrowingSupplier<U> supplier) {
+    ThrowingFunction<V, U> mapping = _ -> supplier.get();
+    return thenMapAsync(mapping, true, executor);
+  }
+
+  public <U> ChainableFuture<U> thenWeaklySupplyAsync(ThrowingSupplier<U> supplier) {
+    ThrowingFunction<V, U> mapping = _ -> supplier.get();
+    return thenMapAsync(mapping, false, executor);
+  }
+
+  public ChainableFuture<V> thenStronglyHandleAsync(ThrowingFunction<? super Throwable, V> handler) {
     return thenHandleAsync(handler, true, executor);
   }
 
-  public ChainableFuture<V> thenWeaklyHandleAsync(Function<? super Throwable, V> handler) {
+  public ChainableFuture<V> thenWeaklyHandleAsync(ThrowingFunction<? super Throwable, V> handler) {
     return thenHandleAsync(handler, false, executor);
   }
 
@@ -223,7 +231,7 @@ public class ChainableFuture<V> implements Future<V> {
 
   private static <V> ChainableFuture<Void> awaitAllAsync(Iterable<ChainableFuture<V>> futures,
                                                            boolean isStrong, ExecutorService executor) {
-    Callable<Void> callable = () -> {
+    ThrowingSupplier<Void> supplier = () -> {
       for (ChainableFuture<V> future : futures) {
         try {
           future.get();
@@ -234,7 +242,7 @@ public class ChainableFuture<V> implements Future<V> {
       return null;
     };
 
-    ChainableFuture<Void> childTask = new ChainableFuture<>(executor, callable, isStrong);
+    ChainableFuture<Void> childTask = new ChainableFuture<>(executor, supplier, isStrong);
     for (ChainableFuture<V> future : futures) {
       childTask.parentTasks.add(future);
       future.childrenCount.incrementAndGet();
@@ -246,7 +254,7 @@ public class ChainableFuture<V> implements Future<V> {
   private static <V> ChainableFuture<List<V>> collectAsync(Iterable<ChainableFuture<V>> futures,
                                                            boolean isStrong, ExecutorService executor,
                                                            boolean mayInterruptIfRunning) {
-    Callable<List<V>> callable = () -> {
+    ThrowingSupplier<List<V>> supplier = () -> {
       try {
         List<V> result = new ArrayList<>();
         for (ChainableFuture<V> future : futures) {
@@ -262,7 +270,7 @@ public class ChainableFuture<V> implements Future<V> {
       }
     };
 
-    ChainableFuture<List<V>> childTask = new ChainableFuture<>(executor, callable, isStrong);
+    ChainableFuture<List<V>> childTask = new ChainableFuture<>(executor, supplier, isStrong);
     for (ChainableFuture<V> future : futures) {
       childTask.parentTasks.add(future);
       future.childrenCount.incrementAndGet();
@@ -279,9 +287,9 @@ public class ChainableFuture<V> implements Future<V> {
 
 
 
-  private <U> ChainableFuture<U> thenMapAsync(Function<? super V, U> mapping, boolean isStrong,
-                                              ExecutorService executor) {
-    Callable<U> callable = () -> {
+  private <U> ChainableFuture<U> thenMapAsync(ThrowingFunction<? super V, U> mapping,
+                                              boolean isStrong, ExecutorService executor) {
+    ThrowingSupplier<U> supplier = () -> {
       try {
         return mapping.apply(currentTask.get());
       } catch (ExecutionException ex) {
@@ -293,16 +301,16 @@ public class ChainableFuture<V> implements Future<V> {
       }
     };
 
-    ChainableFuture<U> childTask = new ChainableFuture<>(executor, callable, isStrong);
+    ChainableFuture<U> childTask = new ChainableFuture<>(executor, supplier, isStrong);
     childTask.parentTasks.add(this);
     childrenCount.incrementAndGet();
 
     return childTask;
   }
 
-  private ChainableFuture<V> thenHandleAsync(Function<? super Throwable, V> handler, boolean isStrong,
-                                             ExecutorService executor) {
-    Callable<V> callable = () -> {
+  private ChainableFuture<V> thenHandleAsync(ThrowingFunction<? super Throwable, V> handler,
+                                             boolean isStrong, ExecutorService executor) {
+    ThrowingSupplier<V> supplier = () -> {
       try {
         return currentTask.get();
       } catch (InterruptedException ex) {
@@ -314,7 +322,7 @@ public class ChainableFuture<V> implements Future<V> {
       }
     };
 
-    ChainableFuture<V> childTask = new ChainableFuture<>(executor, callable, isStrong);
+    ChainableFuture<V> childTask = new ChainableFuture<>(executor, supplier, isStrong);
     childTask.parentTasks.add(this);
     childrenCount.incrementAndGet();
 
@@ -323,7 +331,7 @@ public class ChainableFuture<V> implements Future<V> {
 
   private <U> ChainableFuture<U> thenComposeAsync(Function<? super V, ? extends Future<U>> function,
                                                   boolean isStrong, ExecutorService executor) {
-    Callable<U> callable = () -> {
+    ThrowingSupplier<U> supplier = () -> {
       try {
         return function.apply(currentTask.get()).get();
       } catch (ExecutionException ex) {
@@ -333,7 +341,7 @@ public class ChainableFuture<V> implements Future<V> {
       }
     };
 
-    ChainableFuture<U> childTask = new ChainableFuture<>(executor, callable, isStrong);
+    ChainableFuture<U> childTask = new ChainableFuture<>(executor, supplier, isStrong);
     childTask.parentTasks.add(this);
     childrenCount.incrementAndGet();
 

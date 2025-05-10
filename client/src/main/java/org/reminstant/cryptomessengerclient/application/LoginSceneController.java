@@ -94,29 +94,45 @@ public class LoginSceneController implements Initializable {
     String login = loginLoginField.getText();
     String password = loginPasswordField.getText();
 
-    int status = stateManager.processLogin(login, password);
+    loginButton.setDisable(true);
+    noAccountButton.setDisable(true);
 
-    if (status == 200) {
-      clearLoginSide();
-    } else {
-      String desc = statusDescriptionHolder.getDescription(status, "loginStatus");
-      loginNotificationLabel.showError(desc);
-    }
+    stateManager.processLogin(login, password).thenWeaklyConsumeAsync(status -> {
+      FxUtil.runOnFxThread(() -> {
+        if (status == 200) {
+          clearLoginSide();
+        } else {
+          String desc = statusDescriptionHolder.getDescription(status, "loginStatus");
+          loginNotificationLabel.showError(desc);
+        }
+        loginButton.setDisable(false);
+        noAccountButton.setDisable(false);
+      });
+    });
   }
 
   private void processReg() {
     String login = regLoginField.getText();
     String password = regPasswordField.getText();
 
-    int status = stateManager.processRegister(login, password);
-    String desc = statusDescriptionHolder.getDescription(status, "registerStatus");
+    regButton.setDisable(true);
+    backToLoginButton.setDisable(true);
 
-    if (status == 200) {
-      swipeToLogin();
-      loginNotificationLabel.showSuccess(desc);
-    } else {
-      regNotificationLabel.showError(desc);
-    }
+    stateManager.processRegister(login, password).thenWeaklyConsumeAsync(status -> {
+      String desc = statusDescriptionHolder.getDescription(status, "registerStatus");
+      FxUtil.runOnFxThread(() -> {
+        if (status == 200) {
+          swipeToLogin();
+          loginNotificationLabel.showSuccess(desc);
+        } else {
+          regNotificationLabel.showError(desc);
+        }
+        regButton.setDisable(false);
+        backToLoginButton.setDisable(false);
+      });
+    });
+
+    // TODO: добавить иконку загрузки
   }
 
   private void swipeToReg() {
