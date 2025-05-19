@@ -3,16 +3,24 @@ package org.reminstant.cryptography.context;
 import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.cryptography.Bits;
 import org.reminstant.cryptography.SymmetricCryptoSystem;
+import org.reminstant.cryptography.symmetric.DEAL;
+import org.reminstant.cryptography.symmetric.DES;
+import org.reminstant.cryptography.symmetric.MAGENTA;
+import org.reminstant.cryptography.symmetric.Serpent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.LongConsumer;
 import java.util.stream.IntStream;
 
@@ -21,30 +29,90 @@ import static java.nio.file.StandardOpenOption.*;
 public final class SymmetricCryptoContext {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SymmetricCryptoContext.class);
-
   private static final int PARALLELISM = Runtime.getRuntime().availableProcessors();
-
   private static final ExecutorService DEFAULT_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
+
+  private static final Random random = new SecureRandom();
 
   public static final String RD_PARAM = "RandomDelta";
 
 
   private final ExecutorService executor;
-
   private final SymmetricCryptoSystem cryptoSystem;
-
   private final Padding paddingMode;
-
   private final BlockCipherMode encryptionMode;
-
   private final int blockByteSize;
-
   private final byte[] initVector;
-
+  private final BigInteger counterMask;
   private final Map<String, Object> extraConfig;
 
-  private final BigInteger counterMask;
 
+  public static List<Integer> getCryptoSystemKeySizes(String cryptoSystemName) {
+    return switch (cryptoSystemName) {
+      case "DES" -> DES.getKeyByteSizes();
+      case "DEAL" -> DEAL.getKeyByteSizes();
+      case "MAGENTA" -> MAGENTA.getKeyByteSizes();
+      case "Serpent" -> Serpent.getKeyByteSizes();
+      default -> throw new IllegalArgumentException("No such algorithm");
+    };
+  }
+
+  public static SymmetricCryptoSystem getCryptoSystem(String cryptoSystemName, byte[] key) {
+    return switch (cryptoSystemName) {
+      case "DES" -> new DES(key);
+      case "DEAL" -> new DEAL(key);
+      case "MAGENTA" -> new MAGENTA(key);
+      case "Serpent" -> new Serpent(key);
+      default -> throw new IllegalArgumentException("No such algorithm");
+    };
+  }
+
+  public static byte[] extractKey(String cryptoSystemName, byte[] otherKey) {
+    List<Integer> keyByteSizes = getCryptoSystemKeySizes(cryptoSystemName);
+    int idx = Collections.binarySearch(keyByteSizes, otherKey.length);
+    if (idx >= 0) {
+      return otherKey;
+    }
+    idx = -(idx + 1);
+    if (idx == 0) {
+      throw new IllegalArgumentException("otherKey is too small for the given cryptoSystem");
+    }
+
+    int length = keyByteSizes.get(idx - 1);
+    byte[] key = Arrays.copyOf(otherKey, length);
+    key[0] |= (byte) 0x80;
+    return key;
+  }
+
+  public static byte[] generateInitVector(SymmetricCryptoSystem cryptoSystem) {
+    byte[] initVector = new byte[cryptoSystem.getBlockByteSize()];
+    random.nextBytes(initVector);
+    return initVector;
+  }
+
+  public static BigInteger generateRandomDelta(SymmetricCryptoSystem cryptoSystem) {
+    byte[] bytes = generateInitVector(cryptoSystem);
+    bytes[0] = (byte) 0xFF;
+    bytes[bytes.length - 1] = (byte) 0xFF;
+    return new BigInteger(1, bytes);
+  }
+
+  public static SymmetricCryptoContext generateContext(String cryptoSystemName, byte[] key,
+                                                       Padding paddingMode, BlockCipherMode cipherMode) {
+    key = extractKey(cryptoSystemName, key);
+    SymmetricCryptoSystem cryptoSystem = getCryptoSystem(cryptoSystemName, key);
+    byte[] initVector = null;
+    Map<String, Object> extraConfig = new HashMap<>();
+
+    if (!cipherMode.equals(BlockCipherMode.ECB)) {
+      initVector = generateInitVector(cryptoSystem);
+    }
+    if (cipherMode.equals(BlockCipherMode.RD)) {
+      extraConfig.put(RD_PARAM, generateRandomDelta(cryptoSystem));
+    }
+
+    return new SymmetricCryptoContext(cryptoSystem, paddingMode, cipherMode, initVector, extraConfig);
+  }
 
   public SymmetricCryptoContext(SymmetricCryptoSystem cryptoSystem, Padding paddingMode,
                                 BlockCipherMode cipherMode, byte[] initVector,
@@ -695,7 +763,7 @@ public final class SymmetricCryptoContext {
         }, executor))
         .toList();
 
-    ChainableFuture<Void> awaiter = ChainableFuture.awaitAllWeaklyAsync(tasks, executor);
+    ChainableFuture<Void> awaiter = ChainableFuture.awaitAllStronglyAsync(tasks, executor);
     try {
       awaiter.waitCompletion();
     } catch (InterruptedException e) {

@@ -1,11 +1,12 @@
 package org.reminstant.cryptography.symmetric;
 
 import org.reminstant.cryptography.Bits;
-import org.reminstant.cryptography.BitNumbering;
 import org.reminstant.cryptography.CryptoOperation;
 import org.reminstant.cryptography.KeyScheduler;
 
 import java.util.List;
+
+import static org.reminstant.cryptography.BitNumbering.MSB1_FIRST;
 
 public final class DES extends FeistelNetwork {
 
@@ -36,6 +37,10 @@ public final class DES extends FeistelNetwork {
   };
 
 
+  public static List<Integer> getKeyByteSizes() {
+    return List.of(KEY_BYTE_SIZE);
+  }
+
   public DES(byte[] key) {
     super(new Scheduler(), new FeistelFunction(), BLOCK_BYTE_SIZE, key);
   }
@@ -46,13 +51,13 @@ public final class DES extends FeistelNetwork {
     if (data.length != BLOCK_BYTE_SIZE) {
       throw new IllegalArgumentException("DES crypto-system handles blocks of 64 bits");
     }
-    byte[] permutation = Bits.permute(data, INITIAL_PERMUTATION, BitNumbering.MSB1);
+    byte[] permutation = Bits.permute(data, INITIAL_PERMUTATION, MSB1_FIRST);
     System.arraycopy(permutation, 0, data, 0, data.length);
   }
 
   @Override
   protected void executeAfterNetwork(byte[] data, boolean isEncryption) {
-    byte[] permutation = Bits.permute(data, INVERSE_INITIAL_PERMUTATION, BitNumbering.MSB1);
+    byte[] permutation = Bits.permute(data, INVERSE_INITIAL_PERMUTATION, MSB1_FIRST);
     System.arraycopy(permutation, 0, data, 0, data.length);
   }
 
@@ -100,11 +105,11 @@ public final class DES extends FeistelNetwork {
         throw new IllegalArgumentException("DES key scheduler handles keys of 56 bits");
       }
 
-      key = Bits.permute(key, PREPARATORY_PERMUTATION, BitNumbering.MSB1);
-      key = Bits.permute(key, PERMUTED_CHOICE_1, BitNumbering.MSB1);
+      key = Bits.permute(key, PREPARATORY_PERMUTATION, MSB1_FIRST);
+      key = Bits.permute(key, PERMUTED_CHOICE_1, MSB1_FIRST);
 
       byte[][] keys = new byte[ROUND_COUNT][];
-      long numberedKey = Bits.merge(key);
+      long numberedKey = Bits.packToLong(key);
       long leftPart = numberedKey >>> 28;
       long rightPart = numberedKey & 0xFFFFFFF;
 
@@ -116,7 +121,7 @@ public final class DES extends FeistelNetwork {
 
         numberedKey = leftPart << 28 | rightPart;
 
-        keys[i] = Bits.permute(Bits.split(numberedKey, KEY_BYTE_SIZE), PERMUTED_CHOICE_2, BitNumbering.MSB1);
+        keys[i] = Bits.permute(Bits.unpackLong(numberedKey, KEY_BYTE_SIZE), PERMUTED_CHOICE_2, MSB1_FIRST);
       }
 
       return keys;
@@ -200,8 +205,8 @@ public final class DES extends FeistelNetwork {
 
     @Override
     public byte[] apply(byte[] data, byte[] key) {
-      data = Bits.permute(data, EXPANSION_PERMUTATION, BitNumbering.MSB1);
-      long numberFormData = Bits.merge(data) ^ Bits.merge(key);
+      data = Bits.permute(data, EXPANSION_PERMUTATION, MSB1_FIRST);
+      long numberFormData = Bits.packToLong(data) ^ Bits.packToLong(key);
       long numberFormTransformedData = 0;
 
       for (int i = 0; i < SUBSTITUTION_TABLES.length; ++i) {
@@ -213,8 +218,8 @@ public final class DES extends FeistelNetwork {
         numberFormTransformedData += SUBSTITUTION_TABLES[i][row][col];
       }
 
-      byte[] transformedData = Bits.split(numberFormTransformedData, BLOCK_BYTE_SIZE / 2);
-      transformedData = Bits.permute(transformedData, PERMUTATION, BitNumbering.MSB1);
+      byte[] transformedData = Bits.unpackLong(numberFormTransformedData, BLOCK_BYTE_SIZE / 2);
+      transformedData = Bits.permute(transformedData, PERMUTATION, MSB1_FIRST);
 
       return transformedData;
     }

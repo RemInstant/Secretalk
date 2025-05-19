@@ -7,19 +7,19 @@ import org.reminstant.cryptography.SymmetricCryptoSystem;
 
 import java.util.Arrays;
 import java.util.function.IntUnaryOperator;
-import java.util.stream.IntStream;
 
-public class FeistelNetwork implements SymmetricCryptoSystem {
+public abstract class FeistelNetwork implements SymmetricCryptoSystem {
 
   private final KeyScheduler keyScheduler;
-
   private final CryptoOperation roundFunction;
-
   private final int blockByteSize;
-
   private byte[][] roundKeys;
 
-  public FeistelNetwork(KeyScheduler keyScheduler, CryptoOperation roundFunction, int blockByteSize, byte[] key) {
+  private final int[] extractLeftPartRule;
+  private final int[] extractRightPartRule;
+
+  public FeistelNetwork(KeyScheduler keyScheduler, CryptoOperation roundFunction,
+                        int blockByteSize, byte[] key) {
     if (keyScheduler == null || roundFunction == null) {
       throw new IllegalArgumentException("keyScheduler and roundFunction must be non-null");
     }
@@ -31,6 +31,13 @@ public class FeistelNetwork implements SymmetricCryptoSystem {
     this.roundFunction = roundFunction;
     this.blockByteSize = blockByteSize;
     this.roundKeys = keyScheduler.schedule(key);
+    this.extractLeftPartRule = new int[blockByteSize / 2];
+    this.extractRightPartRule = new int[blockByteSize / 2];
+
+    for (int i = 0; i < blockByteSize / 2; ++i) {
+      extractLeftPartRule[i] = i;
+      extractRightPartRule[i] = blockByteSize / 2 + i;
+    }
   }
 
   @Override
@@ -61,7 +68,6 @@ public class FeistelNetwork implements SymmetricCryptoSystem {
     return blockByteSize;
   }
 
-
   @SuppressWarnings("unused")
   protected void executeBeforeNetwork(byte[] data, boolean isEncryption) {
     // Override in subclasses
@@ -79,8 +85,8 @@ public class FeistelNetwork implements SymmetricCryptoSystem {
           String.format("This Feistel network instance handles blocks of %s byte-size", blockByteSize));
     }
 
-    byte[] leftPart = getLeftPart(data);
-    byte[] rightPart = getRightPart(data);
+    byte[] leftPart = Bits.permuteBytes(data, extractLeftPartRule);
+    byte[] rightPart = Bits.permuteBytes(data, extractRightPartRule);
 
     for (int i = 0; i < roundKeys.length; ++i) {
       int keyIndex = keyIndexSelector.applyAsInt(i);
@@ -90,25 +96,6 @@ public class FeistelNetwork implements SymmetricCryptoSystem {
       rightPart = Bits.xor(tmp, functionValue);
     }
 
-    System.arraycopy(mergeParts(rightPart, leftPart), 0, data, 0, data.length); // NOSONAR
-  }
-
-  private byte[] getLeftPart(byte[] data) {
-    byte[] part = new byte[data.length / 2];
-    IntStream.range(0, part.length).forEach(i -> part[i] = data[i]);
-    return part;
-  }
-
-  private byte[] getRightPart(byte[] data) {
-    byte[] part = new byte[data.length / 2];
-    IntStream.range(0, part.length).forEach(i -> part[i] = data[i + part.length]);
-    return part;
-  }
-
-  private byte[] mergeParts(byte[] leftPart, byte[] rightPart) {
-    byte[] res = new byte[2 * leftPart.length];
-    IntStream.range(0, leftPart.length).forEach(i -> res[i] = leftPart[i]);
-    IntStream.range(0, rightPart.length).forEach(i -> res[i + leftPart.length] = rightPart[i]);
-    return res;
+    System.arraycopy(Bits.merge(rightPart, leftPart), 0, data, 0, data.length);
   }
 }

@@ -31,6 +31,10 @@ public class CryptoProgress<T> {
     return future.isDone();
   }
 
+  public boolean isCompletedExceptionally() {
+    return future.isCompletedExceptionally();
+  }
+
   public boolean isCancelled() {
     return future.isCancelled();
   }
@@ -39,7 +43,8 @@ public class CryptoProgress<T> {
     return future.get();
   }
 
-  public T getResult(long timeout, TimeUnit unit) throws ExecutionException, InterruptedException, TimeoutException {
+  public T getResult(long timeout, TimeUnit unit)
+      throws ExecutionException, InterruptedException, TimeoutException {
     return future.get(timeout, unit);
   }
 

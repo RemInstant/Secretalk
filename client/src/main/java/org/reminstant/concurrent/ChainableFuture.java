@@ -19,7 +19,7 @@ public class ChainableFuture<V> implements Future<V> {
   private final boolean isStrong;
   private final Set<ChainableFuture<?>> parentTasks;
   private final AtomicInteger childrenCount;
-  
+
 
 
   public static ChainableFuture<Void> getCompleted() {
@@ -42,8 +42,8 @@ public class ChainableFuture<V> implements Future<V> {
   public static ChainableFuture<Void> runStronglyAsync(ThrowingRunnable runnable, ExecutorService executor) {
     return supplyWeaklyAsync(ThrowingFunctions.toSupplier(runnable), executor);
   }
-  
-  
+
+
   public static <V> ChainableFuture<V> supplyStronglyAsync(ThrowingSupplier<V> supplier) {
     return new ChainableFuture<>(DEFAULT_EXECUTOR, supplier, true);
   }
@@ -70,12 +70,12 @@ public class ChainableFuture<V> implements Future<V> {
   }
 
   public static <V> ChainableFuture<Void> awaitAllStronglyAsync(Iterable<ChainableFuture<V>> futures,
-                                                                  ExecutorService executor) {
+                                                                ExecutorService executor) {
     return awaitAllAsync(futures, true, executor);
   }
 
   public static <V> ChainableFuture<Void> awaitAllWeaklyAsync(Iterable<ChainableFuture<V>> futures,
-                                                                ExecutorService executor) {
+                                                              ExecutorService executor) {
     return awaitAllAsync(futures, false, executor);
   }
 
@@ -89,8 +89,8 @@ public class ChainableFuture<V> implements Future<V> {
     this.childrenCount = new AtomicInteger(0);
   }
 
-  
-  
+
+
   public <U> ChainableFuture<U> thenStronglyMapAsync(ThrowingFunction<? super V, U> mapping) {
     return thenMapAsync(mapping, true, executor);
   }
@@ -141,11 +141,11 @@ public class ChainableFuture<V> implements Future<V> {
     return thenMapAsync(mapping, false, executor);
   }
 
-  public ChainableFuture<V> thenStronglyHandleAsync(ThrowingFunction<? super Throwable, V> handler) {
+  public ChainableFuture<V> thenStronglyHandleAsync(ThrowingFunction<? super Exception, V> handler) {
     return thenHandleAsync(handler, true, executor);
   }
 
-  public ChainableFuture<V> thenWeaklyHandleAsync(ThrowingFunction<? super Throwable, V> handler) {
+  public ChainableFuture<V> thenWeaklyHandleAsync(ThrowingFunction<? super Exception, V> handler) {
     return thenHandleAsync(handler, false, executor);
   }
 
@@ -211,6 +211,16 @@ public class ChainableFuture<V> implements Future<V> {
     }
   }
 
+  public boolean isCompletedExceptionally() {
+    try {
+      //noinspection ThrowableNotThrown
+      exceptionNow();
+      return true;
+    } catch (IllegalStateException ex) {
+      return false;
+    }
+  }
+
   public void waitCompletion() throws InterruptedException {
     try {
       get();
@@ -230,7 +240,7 @@ public class ChainableFuture<V> implements Future<V> {
 
 
   private static <V> ChainableFuture<Void> awaitAllAsync(Iterable<ChainableFuture<V>> futures,
-                                                           boolean isStrong, ExecutorService executor) {
+                                                         boolean isStrong, ExecutorService executor) {
     ThrowingSupplier<Void> supplier = () -> {
       for (ChainableFuture<V> future : futures) {
         try {
@@ -308,7 +318,7 @@ public class ChainableFuture<V> implements Future<V> {
     return childTask;
   }
 
-  private ChainableFuture<V> thenHandleAsync(ThrowingFunction<? super Throwable, V> handler,
+  private ChainableFuture<V> thenHandleAsync(ThrowingFunction<? super Exception, V> handler,
                                              boolean isStrong, ExecutorService executor) {
     ThrowingSupplier<V> supplier = () -> {
       try {
@@ -316,7 +326,10 @@ public class ChainableFuture<V> implements Future<V> {
       } catch (InterruptedException ex) {
         throw new InterruptedException();
       } catch (ExecutionException ex) {
-        return handler.apply(ex.getCause());
+        if (ex.getCause() instanceof Exception cause) {
+          return handler.apply(cause);
+        }
+        throw new ChainExecutionException(ex);
       } catch (Exception ex) {
         return handler.apply(ex);
       }

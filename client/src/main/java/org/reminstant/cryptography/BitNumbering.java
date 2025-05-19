@@ -1,10 +1,10 @@
 package org.reminstant.cryptography;
 
 public enum BitNumbering {
-  LSB0, // The bit numbering starts at zero for the least significant bit
-  LSB1, // The bit numbering starts at one  for the least significant bit
-  MSB0, // The bit numbering starts at zero for the most  significant bit
-  MSB1; // The bit numbering starts at one  for the most  significant bit
+  LSB0_FIRST, // The bit numbering starts at zero for the least significant bit
+  LSB1_FIRST, // The bit numbering starts at one  for the least significant bit
+  MSB0_FIRST, // The bit numbering starts at zero for the most  significant bit
+  MSB1_FIRST; // The bit numbering starts at one  for the most  significant bit
 
   public boolean getBit(byte[] data, int index) {
     throwIfIndexOutOfBound(index, data.length);
@@ -43,7 +43,7 @@ public enum BitNumbering {
   }
 
   private void throwIfIndexOutOfBound(int index, int length) {
-    if (this.equals(LSB0) || this.equals(MSB0)) {
+    if (this.equals(LSB0_FIRST) || this.equals(MSB0_FIRST)) {
       if (index < 0 || index >= 8 * length) {
         throw new IndexOutOfBoundsException(
             String.format("There is no %dth index in %s indexing (bit count = %d}", index, this, 8 * length));
@@ -58,19 +58,19 @@ public enum BitNumbering {
 
   private int getByteIndex(int index, int length) {
     return switch(this) {
-      case LSB0 -> length - (index + 1) / Byte.SIZE;
-      case LSB1 -> length - index / Byte.SIZE;
-      case MSB0 -> index / Byte.SIZE;
-      case MSB1 -> (index - 1) / Byte.SIZE;
+      case LSB0_FIRST -> length - 1 - index / Byte.SIZE;
+      case LSB1_FIRST -> length - 1 - (index - 1) / Byte.SIZE;
+      case MSB0_FIRST -> index / Byte.SIZE;
+      case MSB1_FIRST -> (index - 1) / Byte.SIZE;
     };
   }
 
   private int getByteShift(int index) {
     return switch(this) {
-      case LSB0 -> index % Byte.SIZE;
-      case LSB1 -> (index - 1) % Byte.SIZE;
-      case MSB0 -> (Byte.SIZE - 1) - index % Byte.SIZE;
-      case MSB1 -> (Byte.SIZE - 1) - (index - 1) % Byte.SIZE;
+      case LSB0_FIRST -> index % Byte.SIZE;
+      case LSB1_FIRST -> (index - 1) % Byte.SIZE;
+      case MSB0_FIRST -> (Byte.SIZE - 1) - index % Byte.SIZE;
+      case MSB1_FIRST -> (Byte.SIZE - 1) - (index - 1) % Byte.SIZE;
     };
   }
 }
