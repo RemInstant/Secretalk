@@ -43,4 +43,6 @@ api:
   break-chat-connection: /api/chat/break-chat-connection
   desert-chat: /api/chat/desert-chat
   destroy-chat: /api/chat/destroy-chat
+  send-chat-message: /api/chat/send-chat-message
+  send-file-part: /api/chat/send-file-part
 

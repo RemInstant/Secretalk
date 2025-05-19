@@ -14,6 +14,8 @@ import net.rgielen.fxweaver.core.FxmlView;
 import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.cryptomessengerclient.application.control.NotificationLabel;
 import org.reminstant.cryptomessengerclient.application.control.SwipableAnchorPane;
+import org.reminstant.cryptomessengerclient.util.FxUtil;
+import org.reminstant.cryptomessengerclient.util.StatusDescriptionHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -31,28 +33,17 @@ public class LoginSceneController implements Initializable {
   private final ApplicationStateManager stateManager;
   private final StatusDescriptionHolder statusDescriptionHolder;
 
-  @FXML
-  private SwipableAnchorPane blockContainer;
-  @FXML
-  private TextField loginLoginField;
-  @FXML
-  private PasswordField loginPasswordField;
-  @FXML
-  private TextField regLoginField;
-  @FXML
-  private PasswordField regPasswordField;
-  @FXML
-  private NotificationLabel loginNotificationLabel;
-  @FXML
-  private NotificationLabel regNotificationLabel;
-  @FXML
-  private Button loginButton;
-  @FXML
-  private Button regButton;
-  @FXML
-  private Button noAccountButton;
-  @FXML
-  private Button backToLoginButton;
+  @FXML private SwipableAnchorPane blockContainer;
+  @FXML private TextField loginLoginField;
+  @FXML private PasswordField loginPasswordField;
+  @FXML private TextField regLoginField;
+  @FXML private PasswordField regPasswordField;
+  @FXML private NotificationLabel loginNotificationLabel;
+  @FXML private NotificationLabel regNotificationLabel;
+  @FXML private Button loginButton;
+  @FXML private Button regButton;
+  @FXML private Button noAccountButton;
+  @FXML private Button backToLoginButton;
 
   public LoginSceneController(ApplicationStateManager sceneManager,
                               StatusDescriptionHolder statusDescriptionHolder) {

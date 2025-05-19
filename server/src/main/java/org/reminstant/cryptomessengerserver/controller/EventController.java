@@ -117,8 +117,8 @@ public class EventController {
                                              Principal principal) {
     logDebugHttpRequest(request, principal, data);
     try {
-      nats.sendChatConnectionRequest(data.chatId(),
-          principal.getName(), data.otherUsername(), data.publicKey());
+      nats.sendChatConnectionRequest(data.chatId(), principal.getName(),
+          data.otherUsername(), data.chatConfiguration(), data.publicKey());
     } catch (Exception ex) {
       log.error("Failed to send NATS event", ex);
       return ResponseEntity
@@ -200,6 +200,48 @@ public class EventController {
     logDebugHttpRequest(request, principal, data);
     try {
       nats.sendChatDestroying(data.chatId(), principal.getName(), data.otherUsername());
+    } catch (Exception ex) {
+      log.error("Failed to send NATS event", ex);
+      return ResponseEntity
+          .status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .contentType(MediaType.APPLICATION_JSON)
+          .build();
+    }
+
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .build();
+  }
+
+  @PostMapping("${api.send-chat-message}")
+  ResponseEntity<Void> sendChatMessage(HttpServletRequest request,
+                                       @RequestBody ChatMessageData data,
+                                       Principal principal) {
+    logDebugHttpRequest(request, principal, data);
+    try {
+      nats.sendChatMessage(data.messageId(), data.chatId(), principal.getName(),
+          data.otherUsername(), data.messageData(), data.attachedFileName());
+    } catch (Exception ex) {
+      log.error("Failed to send NATS event", ex);
+      return ResponseEntity
+          .status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .contentType(MediaType.APPLICATION_JSON)
+          .build();
+    }
+
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .build();
+  }
+
+  @PostMapping("${api.send-file-part}")
+  ResponseEntity<Void> sendFilePart(HttpServletRequest request,
+                                    @RequestBody ChatFileData data,
+                                    Principal principal) {
+    logDebugHttpRequest(request, principal, data);
+    try {
+      nats.sendFilePart(data.messageId(), data.chatId(), principal.getName(),
+          data.otherUsername(), data.partCount(), data.partNumber(), data.fileData());
     } catch (Exception ex) {
       log.error("Failed to send NATS event", ex);
       return ResponseEntity

@@ -1,8 +1,8 @@
 package org.reminstant.cryptomessengerserver.dto.nats;
 
 import lombok.Getter;
+import org.reminstant.cryptomessengerserver.dto.common.ChatConfiguration;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -13,26 +13,28 @@ public class ChatConnectionRequestEvent extends UserEvent {
 
   private final String chatId;
   private final String requesterUsername;
+  private final ChatConfiguration chatConfiguration;
   private final String publicKey;
 
-  public ChatConnectionRequestEvent(String chatId, String requesterUsername, String publicKey) {
-    this(UUID.randomUUID().toString(), chatId, requesterUsername, publicKey);
+  public ChatConnectionRequestEvent(String chatId, String requesterUsername,
+                                    ChatConfiguration chatConfiguration, String publicKey) {
+    this(UUID.randomUUID().toString(), chatId, requesterUsername, chatConfiguration, publicKey);
   }
 
-  public ChatConnectionRequestEvent(String id, String chatId, String requesterUsername, String publicKey) {
+  public ChatConnectionRequestEvent(String id, String chatId, String requesterUsername,
+                                    ChatConfiguration chatConfiguration, String publicKey) {
     super(id);
     Objects.requireNonNull(chatId, "chatId cannot be null");
     Objects.requireNonNull(requesterUsername, "requesterUsername cannot be null");
+    Objects.requireNonNull(chatConfiguration, "configuration cannot be null");
     Objects.requireNonNull(publicKey, "publicKey cannot be null");
     this.chatId = chatId;
     this.requesterUsername = requesterUsername;
+    this.chatConfiguration = chatConfiguration;
     this.publicKey = publicKey;
   }
 
-  public ChatConnectionRequestEvent(Map<String, String> data) {
-    this(data.getOrDefault("id", null),
-        data.getOrDefault("chatId", null),
-        data.getOrDefault("requesterUsername", null),
-        data.getOrDefault("publicKey", null));
+  ChatConnectionRequestEvent() {
+    this("", "", "", new ChatConfiguration(), "");
   }
 }

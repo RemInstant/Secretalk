@@ -247,6 +247,7 @@
 .messageBlock .messageCancelLabel {
     -fx-font-size: 10pt;
     -fx-text-fill: #111111;
+    -fx-cursor: hand;
 }
 
 .messageBlock .messageCancelButton {
@@ -258,12 +259,43 @@
 
 
 /* Message block end */
+/* Attached file block begin */
 
-/* Chat footer begin */
-#chatFooter {
-    -fx-background-color: #afafaf;
+#attachedFileBlock {
+    -fx-min-height: 30px;
+    -fx-max-height: 30px;
+    -fx-padding: 0 15px 0 15px;
+
     -fx-border-width: 1px 0 0 0;
     -fx-border-color: #424242;
+
+    -fx-background-color: #afafaf;
+
+    -fx-alignment: center;
+}
+
+#attachedFileBlock .label {
+    -fx-font-size: 12pt;
+}
+
+#attachedFileLabel {
+    -fx-padding: 0 0 0 5px;
+}
+
+#attachedFileCancelLabel.label {
+    -fx-padding: 0 0 3px 0;
+    -fx-font-size: 16pt;
+    -fx-cursor: hand;
+}
+
+
+
+/* Attached file block begin */
+/* Chat footer begin */
+#chatFooter {
+    -fx-border-width: 1px 0 0 0;
+    -fx-border-color: #424242;
+    -fx-background-color: #afafaf;
 }
 
 #messageInput {
@@ -319,8 +351,13 @@
     -fx-padding: 3px 25px 15px 25px;
 }
 
-.dialogBlock .input {
+.dialogBlock .text-field.input {
     -fx-padding: 5px;
+    -fx-font-size: 12pt;
+}
+
+.dialogBlock .choice-box.input {
+    -fx-padding: 2px;
     -fx-font-size: 12pt;
 }
 
@@ -335,6 +372,7 @@
 }
 
 .dialogBlock .buttonHolder {
+    -fx-padding: 10px 0 0 0;
     -fx-alignment: top-center;
 }
 
@@ -347,10 +385,8 @@
 }
 
 #chatCreationBlock {
-    -fx-min-width: 400px;
-    -fx-min-height: 300px;
     -fx-max-width: 400px;
-    -fx-max-height: 300px;
+    -fx-max-height: 575px;
 }
 
 #chatCreationBlock .buttonHolderWrapper {

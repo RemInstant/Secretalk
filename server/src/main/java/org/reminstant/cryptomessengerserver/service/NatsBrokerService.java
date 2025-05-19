@@ -1,17 +1,18 @@
 package org.reminstant.cryptomessengerserver.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.*;
 import io.nats.client.api.*;
 import io.nats.client.impl.Headers;
 import lombok.extern.slf4j.Slf4j;
+import org.reminstant.cryptomessengerserver.dto.common.ChatConfiguration;
 import org.reminstant.cryptomessengerserver.dto.nats.*;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
@@ -76,9 +77,7 @@ public class NatsBrokerService implements DisposableBean {
       return UserEvent.getVoidEvent();
     }
 
-    Map<String, String> data = objectMapper.readValue(msg.getData(), new TypeReference<>() {});
-    UserEvent event = UserEvent.getEvent(eventType, data);
-
+    UserEvent event = UserEvent.getEvent(eventType, msg.getData());
     saveMessageToAcknowledge(username, event.getId(), msg);
     return event;
   }
@@ -94,11 +93,13 @@ public class NatsBrokerService implements DisposableBean {
   public void sendChatConnectionRequest(String chatId,
                                         String username,
                                         String otherUsername,
+                                        ChatConfiguration chatConfiguration,
                                         String publicKey)
       throws JetStreamApiException, IOException {
     Objects.requireNonNull(chatId, "chatId cannot be null");
     Objects.requireNonNull(username, "username cannot be null");
     Objects.requireNonNull(otherUsername, "otherUsername cannot be null");
+    Objects.requireNonNull(chatConfiguration, "chatConfiguration cannot be null");
     Objects.requireNonNull(publicKey, "publicKey cannot be null");
 
     String subject = getUserEventSubject(otherUsername);
@@ -106,8 +107,8 @@ public class NatsBrokerService implements DisposableBean {
         .put("Event-Type", ChatConnectionRequestEvent.EVENT_NAME);
 
     try {
-      String json = objectMapper
-          .writeValueAsString(new ChatConnectionRequestEvent(chatId, username, publicKey));
+      String json = objectMapper.writeValueAsString(
+          new ChatConnectionRequestEvent(chatId, username, chatConfiguration, publicKey));
       jetStream.publish(subject, headers, json.getBytes());
     } catch (JsonProcessingException ex) {
       log.error("Failed to jsonify ChatConnectionRequestEvent");
@@ -139,9 +140,7 @@ public class NatsBrokerService implements DisposableBean {
     }
   }
 
-  public void sendChatConnectionBreak(String chatId,
-                                      String username,
-                                      String otherUsername)
+  public void sendChatConnectionBreak(String chatId, String username, String otherUsername)
       throws JetStreamApiException, IOException {
     Objects.requireNonNull(chatId, "chatId cannot be null");
     Objects.requireNonNull(username, "username cannot be null");
@@ -161,9 +160,7 @@ public class NatsBrokerService implements DisposableBean {
     }
   }
 
-  public void sendChatDeserting(String chatId,
-                                String username,
-                                String otherUsername)
+  public void sendChatDeserting(String chatId, String username, String otherUsername)
       throws JetStreamApiException, IOException {
     Objects.requireNonNull(chatId, "chatId cannot be null");
     Objects.requireNonNull(username, "username cannot be null");
@@ -183,9 +180,7 @@ public class NatsBrokerService implements DisposableBean {
     }
   }
 
-  public void sendChatDestroying(String chatId,
-                                 String username,
-                                 String otherUsername)
+  public void sendChatDestroying(String chatId, String username, String otherUsername)
       throws JetStreamApiException, IOException {
     Objects.requireNonNull(chatId, "chatId cannot be null");
     Objects.requireNonNull(username, "username cannot be null");
@@ -201,6 +196,52 @@ public class NatsBrokerService implements DisposableBean {
       jetStream.publish(subject, headers, json.getBytes());
     } catch (JsonProcessingException ex) {
       log.error("Failed to jsonify ChatDestroyEvent");
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public void sendChatMessage(String messageId, String chatId, String username, String otherUsername,
+                              byte[] messageData, String attachedFileName)
+      throws JetStreamApiException, IOException {
+    Objects.requireNonNull(messageId, "messageId cannot be null");
+    Objects.requireNonNull(chatId, "chatId cannot be null");
+    Objects.requireNonNull(username, "username cannot be null");
+    Objects.requireNonNull(otherUsername, "otherUsername cannot be null");
+    Objects.requireNonNull(messageData, "messageData cannot be null");
+
+    String subject = getUserEventSubject(otherUsername);
+    Headers headers = new Headers()
+        .put("Event-Type", ChatMessageEvent.EVENT_NAME);
+
+    try {
+      String json = objectMapper.writeValueAsString(
+          new ChatMessageEvent(messageId, chatId, username, messageData, attachedFileName));
+      jetStream.publish(subject, headers, json.getBytes());
+    } catch (JsonProcessingException ex) {
+      log.error("Failed to jsonify ChatMessageEvent");
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public void sendFilePart(String messageId, String chatId, String username, String otherUsername,
+                           long partCount, long partNumber, byte[] fileData)
+      throws JetStreamApiException, IOException {
+    Objects.requireNonNull(messageId, "messageId cannot be null");
+    Objects.requireNonNull(chatId, "chatId cannot be null");
+    Objects.requireNonNull(username, "username cannot be null");
+    Objects.requireNonNull(otherUsername, "otherUsername cannot be null");
+    Objects.requireNonNull(fileData, "fileData cannot be null");
+
+    String subject = getUserEventSubject(otherUsername);
+    Headers headers = new Headers()
+        .put("Event-Type", ChatFileEvent.EVENT_NAME);
+
+    try {
+      String json = objectMapper.writeValueAsString(
+          new ChatFileEvent(messageId, chatId, username, partCount, partNumber, fileData));
+      jetStream.publish(subject, headers, json.getBytes());
+    } catch (JsonProcessingException ex) {
+      log.error("Failed to jsonify ChatMessageEvent");
       throw new RuntimeException(ex);
     }
   }

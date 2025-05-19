@@ -1,4 +1,4 @@
-package org.reminstant.cryptomessengerserver.util;
+package org.reminstant.cryptomessengerclient.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 

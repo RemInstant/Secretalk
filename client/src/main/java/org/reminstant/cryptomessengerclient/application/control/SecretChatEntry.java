@@ -7,19 +7,19 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.css.PseudoClass;
 import javafx.scene.control.Label;
 import lombok.Getter;
-import org.reminstant.cryptomessengerclient.model.SecretChat;
+import org.reminstant.cryptomessengerclient.model.Chat;
 
 import java.math.BigInteger;
 
 public class SecretChatEntry extends Label {
 
   @Getter
-  private final SecretChat secretChat;
+  private final Chat chat;
 
   private final BooleanProperty active;
 
   @Getter
-  private final ObjectProperty<SecretChat.State> stateProperty;
+  private final ObjectProperty<Chat.State> stateProperty;
   private final BooleanProperty pending;
   private final BooleanProperty awaiting;
   private final BooleanProperty connected;
@@ -28,14 +28,14 @@ public class SecretChatEntry extends Label {
   private final BooleanProperty deserted;
   private final BooleanProperty destroyed;
 
-  public SecretChatEntry(SecretChat secretChat) {
+  public SecretChatEntry(Chat chat) {
     super();
-    this.secretChat = secretChat;
-    this.setText(secretChat.getTitle());
+    this.chat = chat;
+    this.setText(chat.getTitle());
     getStyleClass().clear();
     getStyleClass().add("secretChatEntry");
 
-    stateProperty = new SimpleObjectProperty<>(secretChat.getState());
+    stateProperty = new SimpleObjectProperty<>(chat.getState());
     active = new SimpleBooleanProperty(false);
     pending = new SimpleBooleanProperty(false);
     awaiting = new SimpleBooleanProperty(false);
@@ -54,7 +54,7 @@ public class SecretChatEntry extends Label {
     addPseudoClassListener(deserted, "deserted");
     addPseudoClassListener(destroyed, "destroyed");
 
-    getStateProperty(secretChat.getState()).setValue(true);
+    getStateProperty(chat.getState()).setValue(true);
   }
 
   public void setChatActive(boolean isChatActive) {
@@ -62,54 +62,54 @@ public class SecretChatEntry extends Label {
   }
 
   public void setPendingState(BigInteger privateKey) {
-    getStateProperty(secretChat.getState()).setValue(false);
-    getStateProperty(SecretChat.State.PENDING).setValue(true);
-    stateProperty.setValue(SecretChat.State.PENDING);
-    secretChat.setState(SecretChat.State.PENDING);
-    secretChat.setKey(privateKey);
+    getStateProperty(chat.getState()).setValue(false);
+    getStateProperty(Chat.State.PENDING).setValue(true);
+    stateProperty.setValue(Chat.State.PENDING);
+    chat.setState(Chat.State.PENDING);
+    chat.setKey(privateKey);
   }
 
   public void setAwaitingState(BigInteger publicKey) {
-    getStateProperty(secretChat.getState()).setValue(false);
-    getStateProperty(SecretChat.State.AWAITING).setValue(true);
-    stateProperty.setValue(SecretChat.State.AWAITING);
-    secretChat.setState(SecretChat.State.AWAITING);
-    secretChat.setKey(publicKey);
+    getStateProperty(chat.getState()).setValue(false);
+    getStateProperty(Chat.State.AWAITING).setValue(true);
+    stateProperty.setValue(Chat.State.AWAITING);
+    chat.setState(Chat.State.AWAITING);
+    chat.setKey(publicKey);
   }
 
   public void setConnectedState(BigInteger sessionKey) {
-    getStateProperty(secretChat.getState()).setValue(false);
-    getStateProperty(SecretChat.State.CONNECTED).setValue(true);
-    stateProperty.setValue(SecretChat.State.CONNECTED);
-    secretChat.setState(SecretChat.State.CONNECTED);
-    secretChat.setKey(sessionKey);
+    getStateProperty(chat.getState()).setValue(false);
+    getStateProperty(Chat.State.CONNECTED).setValue(true);
+    stateProperty.setValue(Chat.State.CONNECTED);
+    chat.setState(Chat.State.CONNECTED);
+    chat.setKey(sessionKey);
   }
 
   public void setDisconnectedState() {
-    getStateProperty(secretChat.getState()).setValue(false);
-    getStateProperty(SecretChat.State.DISCONNECTED).setValue(true);
-    stateProperty.setValue(SecretChat.State.DISCONNECTED);
-    secretChat.setState(SecretChat.State.DISCONNECTED);
-    secretChat.setKey(null);
+    getStateProperty(chat.getState()).setValue(false);
+    getStateProperty(Chat.State.DISCONNECTED).setValue(true);
+    stateProperty.setValue(Chat.State.DISCONNECTED);
+    chat.setState(Chat.State.DISCONNECTED);
+    chat.setKey(null);
   }
 
   public void setDesertedState() {
-    getStateProperty(secretChat.getState()).setValue(false);
-    getStateProperty(SecretChat.State.DESERTED).setValue(true);
-    stateProperty.setValue(SecretChat.State.DESERTED);
-    secretChat.setState(SecretChat.State.DESERTED);
-    secretChat.setKey(null);
+    getStateProperty(chat.getState()).setValue(false);
+    getStateProperty(Chat.State.DESERTED).setValue(true);
+    stateProperty.setValue(Chat.State.DESERTED);
+    chat.setState(Chat.State.DESERTED);
+    chat.setKey(null);
   }
 
   public void setDestroyedState() {
-    getStateProperty(secretChat.getState()).setValue(false);
-    getStateProperty(SecretChat.State.DESTROYED).setValue(true);
-    stateProperty.setValue(SecretChat.State.DESTROYED);
-    secretChat.setState(SecretChat.State.DESTROYED);
-    secretChat.setKey(null);
+    getStateProperty(chat.getState()).setValue(false);
+    getStateProperty(Chat.State.DESTROYED).setValue(true);
+    stateProperty.setValue(Chat.State.DESTROYED);
+    chat.setState(Chat.State.DESTROYED);
+    chat.setKey(null);
   }
 
-  private BooleanProperty getStateProperty(SecretChat.State state) {
+  private BooleanProperty getStateProperty(Chat.State state) {
     return switch (state) {
       case PENDING -> pending;
       case AWAITING -> awaiting;

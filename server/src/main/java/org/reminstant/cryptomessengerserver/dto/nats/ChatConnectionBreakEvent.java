@@ -2,7 +2,6 @@ package org.reminstant.cryptomessengerserver.dto.nats;
 
 import lombok.Getter;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -26,9 +25,7 @@ public class ChatConnectionBreakEvent extends UserEvent {
     this.senderUsername = senderUsername;
   }
 
-  public ChatConnectionBreakEvent(Map<String, String> data) {
-    this(data.getOrDefault("id", null),
-        data.getOrDefault("chatId", null),
-        data.getOrDefault("senderUsername", null));
+  ChatConnectionBreakEvent() {
+    this("", "", "");
   }
 }

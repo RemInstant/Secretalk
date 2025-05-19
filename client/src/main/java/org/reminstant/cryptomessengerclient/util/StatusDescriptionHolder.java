@@ -1,4 +1,4 @@
-package org.reminstant.cryptomessengerclient.application;
+package org.reminstant.cryptomessengerclient.util;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

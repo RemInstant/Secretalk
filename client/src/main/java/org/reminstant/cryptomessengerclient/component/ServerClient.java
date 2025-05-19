@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.reminstant.cryptomessengerclient.dto.*;
 import org.reminstant.cryptomessengerclient.exception.InvalidServerAnswer;
+import org.reminstant.cryptomessengerclient.model.Chat;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -28,7 +29,7 @@ public class ServerClient {
   private static final String CONTENT_TYPE_HEADER = "Content-Type";
   private static final String CONTENT_TYPE_HEADER_APPLICATION_JSON = "application/json";
 
-  private static final Duration STANDARD_TIMEOUT = Duration.ofSeconds(5);
+  private static final Duration STANDARD_TIMEOUT = Duration.ofSeconds(30);
   
   private static final HttpClient httpClient = HttpClient.newHttpClient();
   private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -137,11 +138,13 @@ public class ServerClient {
         .build(), data, UserEventWrapperResponse.class);
   }
 
-  public NoPayloadResponse requestChatConnection(String chatId, String otherUsername, String publicKey)
+  public NoPayloadResponse requestChatConnection(String chatId, String otherUsername,
+                                                 Chat.Configuration config, String publicKey)
       throws IOException, InvalidServerAnswer {
     Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername,
+        "chatConfiguration", config,
         "publicKey", publicKey);
     String json = objectMapper.writeValueAsString(data);
 
@@ -185,18 +188,49 @@ public class ServerClient {
         .build(), data, UserEventWrapperResponse.class);
   }
 
-  public NoPayloadResponse sendChatMessage(String chatId, String otherUsername,
-                                           int messageSize, byte[] messageData)
+  public NoPayloadResponse sendChatMessage(String messageId, String chatId, String otherUsername,
+                                           byte[] messageData, String attachedFileName)
       throws IOException, InvalidServerAnswer {
-    Map<String, Object> data = Map.of(
-        "chatId", chatId,
-        "otherUsername", otherUsername,
-        "messageSize", messageSize,
-        "messageData", messageData);
+    Map<String, Object> data;
+    if (attachedFileName == null) {
+      data = Map.of(
+          "messageId", messageId,
+          "chatId", chatId,
+          "otherUsername", otherUsername,
+          "messageData", messageData);
+    } else {
+      data = Map.of(
+          "messageId", messageId,
+          "chatId", chatId,
+          "otherUsername", otherUsername,
+          "messageData", messageData,
+          "attachedFileName", attachedFileName);
+    }
     String json = objectMapper.writeValueAsString(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/send-chat-message"))
+        .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
+        .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
+        .POST(HttpRequest.BodyPublishers.ofString(json))
+        .build(), data, UserEventWrapperResponse.class);
+  }
+
+  public NoPayloadResponse sendFilePart(String messageId, String chatId, String otherUsername,
+                                        int partNumber, int partCount, byte[] fileData)
+      throws IOException, InvalidServerAnswer {
+    Map<String, Object> data = Map.of(
+        "messageId", messageId,
+        "chatId", chatId,
+        "otherUsername", otherUsername,
+        "partNumber", partNumber,
+        "partCount", partCount,
+        "fileData", fileData);
+    String json = objectMapper.writeValueAsString(data);
+
+    log.info("sent filePart {}", fileData);
+    return sendRequest(HttpRequest.newBuilder()
+        .uri(URI.create("http://localhost:8080/api/chat/send-file-part"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))

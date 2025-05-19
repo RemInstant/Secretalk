@@ -2,22 +2,24 @@ package org.reminstant.cryptomessengerclient.application;
 
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
 import net.rgielen.fxweaver.core.FxmlView;
 import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.cryptomessengerclient.application.control.ExpandableTextArea;
 import org.reminstant.cryptomessengerclient.application.control.NotificationLabel;
+import org.reminstant.cryptomessengerclient.model.Chat;
+import org.reminstant.cryptomessengerclient.util.FxUtil;
+import org.reminstant.cryptomessengerclient.util.StatusDescriptionHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
 import java.net.URL;
 import java.util.ResourceBundle;
 
@@ -30,72 +32,74 @@ public class MainSceneController implements Initializable {
   private final ApplicationStateManager stateManager;
   private final StatusDescriptionHolder statusDescriptionHolder;
 
+  @FXML private ImageView settingsButton;
+  @FXML private ImageView addChatButton;
+  @FXML private ImageView deleteChatButton;
+  @FXML private ImageView attachFileButton;
+  @FXML private ImageView sendButton;
+
+  @FXML private ScrollPane chatHolderScroll;
+  @FXML private VBox chatHolder;
+  @FXML private ExpandableTextArea messageInput;
+
+
+  @FXML private VBox rightBlock;
+  @FXML private Label chatTitle;
+  @FXML private StackPane chatStateBlockHolder;
+
+  @FXML private ScrollPane messageHolderWrapper;
+
+  @FXML private HBox attachedFileBlock;
+  @FXML private Label attachedFileLabel;
+  @FXML private Label attachedFileCancelLabel;
+
+  // "dialog" panes
+  @FXML private Pane shadow;
+
+  @FXML private VBox chatCreationBlock;
+  @FXML private TextField chatCreatingUsernameField;
+  @FXML private TextField chatCreatingTitleField;
+  @FXML private ChoiceBox<String> chatCreatingAlgoChoice;
+  @FXML private ChoiceBox<String> chatCreatingModeChoice;
+  @FXML private ChoiceBox<String> chatCreatingPaddingChoice;
+  @FXML private NotificationLabel chatCreationNotificationLabel;
+  @FXML private Button chatCreatingButton;
+  @FXML private Button chatCreatingCancelButton;
+
+  @FXML private VBox chatDeletionBlock;
+  @FXML private Button chatSelfDeletionButton;
+  @FXML private Button chatDeletionButton;
+  @FXML private Button chatDeletionCancelButton;
+
+  //
+  private final FileChooser messageFileChooser;
+  private File attachedFile;
+
+
   public MainSceneController(ApplicationStateManager sceneManager,
                              StatusDescriptionHolder statusDescriptionHolder) {
     this.stateManager = sceneManager;
     this.statusDescriptionHolder = statusDescriptionHolder;
+
+    this.messageFileChooser = new FileChooser();
+    this.attachedFile = null;
   }
 
-  @FXML
-  private ImageView settingsButton;
-  @FXML
-  private ImageView addChatButton;
-  @FXML
-  private ImageView deleteChatButton;
-  @FXML
-  private ImageView sendButton;
 
-  @FXML
-  private ScrollPane chatHolderScroll;
-  @FXML
-  private VBox chatHolder;
-  @FXML
-  private ExpandableTextArea messageInput;
-
-
-  @FXML
-  private VBox rightBlock;
-  @FXML
-  private Label chatTitle;
-  @FXML
-  private StackPane chatStateBlockHolder;
-
-  @FXML
-  private ScrollPane messageHolderWrapper;
-
-  // "dialog" panes
-  @FXML
-  private Pane shadow;
-
-  @FXML
-  private VBox chatCreationBlock;
-  @FXML
-  private TextField chatCreatingUsernameField;
-  @FXML
-  private NotificationLabel chatCreationNotificationLabel;
-  @FXML
-  private Button chatCreatingButton;
-  @FXML
-  private Button chatCreatingCancelButton;
-
-  @FXML
-  private VBox chatDeletionBlock;
-  @FXML
-  private Button chatSelfDeletionButton;
-  @FXML
-  private Button chatDeletionButton;
-  @FXML
-  private Button chatDeletionCancelButton;
-
-
+  @SuppressWarnings("DuplicatedCode")
   @Override
   public void initialize(URL url, ResourceBundle resourceBundle) {
     chatHolder.prefWidthProperty().bind(chatHolderScroll.widthProperty().subtract(4));
+    chatCreatingUsernameField.textProperty().addListener(_ ->
+        chatCreatingTitleField.setText(chatCreatingUsernameField.getText()));
 
     settingsButton.setOnMouseClicked(this::onSettingsButtonClicked);
     addChatButton.setOnMouseClicked(this::onAddChatButtonClicked);
-    deleteChatButton.setOnMouseClicked(this::onAddDeleteButtonClicked);
-    sendButton.setOnMouseClicked(this::onSendMessageButtonClicked);
+    deleteChatButton.setOnMouseClicked(this::onDeleteChatButtonClicked);
+    sendButton.setOnMouseClicked(this::onSendButtonClicked);
+    attachFileButton.setOnMouseClicked(this::onAttachFileButtonClicked);
+
+    attachedFileCancelLabel.setOnMouseClicked(this::onDetachFileButtonClicked);
 
     shadow.setOnMouseClicked(this::onShadowClicked);
     chatCreatingButton.setOnMouseClicked(this::onChatCreatingButtonClicked);
@@ -106,11 +110,16 @@ public class MainSceneController implements Initializable {
 
     rightBlock.getChildren().forEach(node -> node.setVisible(false));
 
-    Runnable onOpening = () -> rightBlock.getChildren().forEach(node -> node.setVisible(true));
-    Runnable onClosing = () -> rightBlock.getChildren().forEach(node -> node.setVisible(false));
+    Runnable onChatOpening = () -> rightBlock.getChildren().forEach(node -> node.setVisible(true));
+    Runnable onChatClosing = () -> rightBlock.getChildren().forEach(node -> node.setVisible(false));
+    Runnable onChatChanging = () -> {
+      detachFile();
+      messageInput.clear();
+    };
 
-    stateManager.initChatManager(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper,
-        onOpening, onClosing);
+    stateManager.initChatManager(
+        chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper,
+        onChatOpening, onChatClosing, onChatChanging);
     log.info("MainSceneController INITIALIZED");
   }
 
@@ -138,6 +147,22 @@ public class MainSceneController implements Initializable {
     chatDeletionBlock.setVisible(false);
 //    chatCreationNotificationLabel.collapse();
   }
+
+  private void attachFile(File file) {
+    attachedFileLabel.setText(file.getName());
+    if (attachedFile == null) {
+      int pos = rightBlock.getChildren().size() - 1;
+      rightBlock.getChildren().add(pos, attachedFileBlock);
+    }
+    attachedFile = file;
+  }
+
+  private void detachFile() {
+    attachedFile = null;
+    rightBlock.getChildren().remove(attachedFileBlock);
+  }
+
+
 
   private void processChatDeserting() {
     stateManager.processChatDeserting()
@@ -167,8 +192,13 @@ public class MainSceneController implements Initializable {
 
   private void processChatCreating() {
     String otherUsername = chatCreatingUsernameField.getText();
+    String title = chatCreatingTitleField.getText();
+    String cryptoSystemName = chatCreatingAlgoChoice.getValue();
+    String cipherMode = chatCreatingModeChoice.getValue();
+    String paddingMode = chatCreatingPaddingChoice.getValue();
+    Chat.Configuration config = new Chat.Configuration(title, cryptoSystemName, cipherMode, paddingMode);
 
-    stateManager.processChatCreation(otherUsername)
+    stateManager.processChatCreation(otherUsername, config)
         .thenWeaklyConsumeAsync(status -> {
           if (status == 200) {
             FxUtil.runOnFxThread(this::closeChatCreatingBlock);
@@ -181,23 +211,35 @@ public class MainSceneController implements Initializable {
         });
   }
 
+  private void processAttachingFile() {
+    File file = messageFileChooser.showOpenDialog(shadow.getScene().getWindow());
+    if (file != null) {
+      attachFile(file);
+    }
+  }
+
   private void processSendingMessage() {
     String messageText = messageInput.getText();
-    if (messageText == null || messageText.isEmpty()) {
+    File messageFile = attachedFile;
+    if (messageText.isEmpty() && messageFile == null) {
       return;
     }
 
-    stateManager.processSendingMessage(messageText)
-        .thenWeaklyConsumeAsync(status -> {
-          if (status == 200) {
-            FxUtil.runOnFxThread(() -> {
-              messageInput.clear();
-              ConcurrentUtil.sleepSafely(100);
-            });
-          } else {
-            // TODO: handle
-          }
-        });
+    messageInput.clear();
+    detachFile();
+
+    stateManager.processSendingMessage(messageText, messageFile);
+//        .thenWeaklyConsumeAsync(status -> {
+//          if (status == 200) {
+//            FxUtil.runOnFxThread(() -> {
+//              messageInput.clear();
+////              ConcurrentUtil.sleepSafely(100);
+//            });
+//          } else {
+//            // TODO: handle
+//          }
+//        });
+
   }
 
 
@@ -214,7 +256,7 @@ public class MainSceneController implements Initializable {
     }
   }
 
-  private void onAddDeleteButtonClicked(MouseEvent e) {
+  private void onDeleteChatButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       openChatDeletionBlock();
     }
@@ -257,7 +299,19 @@ public class MainSceneController implements Initializable {
     }
   }
 
-  private void onSendMessageButtonClicked(MouseEvent e) {
+  private void onAttachFileButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      processAttachingFile();
+    }
+  }
+
+  private void onDetachFileButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      detachFile();
+    }
+  }
+
+  private void onSendButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       processSendingMessage();
     }

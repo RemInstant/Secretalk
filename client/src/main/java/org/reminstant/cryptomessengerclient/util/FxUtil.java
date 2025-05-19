@@ -1,8 +1,6 @@
-package org.reminstant.cryptomessengerclient.application;
+package org.reminstant.cryptomessengerclient.util;
 
 import javafx.application.Platform;
-
-import java.util.function.Supplier;
 
 public class FxUtil {
 
