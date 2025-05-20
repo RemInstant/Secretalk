@@ -2,10 +2,10 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/CryptoMessenger.iml" filepath="$PROJECT_DIR$/.idea/CryptoMessenger.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/CryptoMessengerClient.main.iml" filepath="$PROJECT_DIR$/.idea/modules/CryptoMessengerClient.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/CryptoMessengerClient.test.iml" filepath="$PROJECT_DIR$/.idea/modules/CryptoMessengerClient.test.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/cryptoMessengerServer.main.iml" filepath="$PROJECT_DIR$/.idea/modules/cryptoMessengerServer.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Secretalk.iml" filepath="$PROJECT_DIR$/.idea/Secretalk.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/SecretalkClient.main.iml" filepath="$PROJECT_DIR$/.idea/modules/SecretalkClient.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/SecretalkClient.test.iml" filepath="$PROJECT_DIR$/.idea/modules/SecretalkClient.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/SecretalkServer.main.iml" filepath="$PROJECT_DIR$/.idea/modules/SecretalkServer.main.iml" />
     </modules>
   </component>
 </project>
