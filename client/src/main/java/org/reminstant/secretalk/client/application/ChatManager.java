@@ -1,7 +1,6 @@
 package org.reminstant.secretalk.client.application;
 
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseButton;
@@ -13,9 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.cryptography.CryptoProvider;
+import org.reminstant.cryptography.context.CryptoProgress;
 import org.reminstant.cryptography.context.SymmetricCryptoContext;
 import org.reminstant.secretalk.client.application.control.MessageEntry;
 import org.reminstant.secretalk.client.application.control.SecretChatEntry;
+import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.model.Chat;
 import org.reminstant.secretalk.client.repository.LocalStorage;
@@ -25,7 +26,6 @@ import org.springframework.stereotype.Component;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 @Slf4j
@@ -40,6 +40,7 @@ public class ChatManager {
 
   private final Map<Chat.State, Pane> stateBlocks;
   private final Map<String, SecretChatEntry> secretChatEntries;
+  private final Map<String, MessageEntry> messageEntries;
   private final SimpleObjectProperty<SecretChatEntry> activeChat;
   private final Map<String, VBox> messageHolders;
   private final Map<String, SymmetricCryptoContext> cryptoContexts;
@@ -50,6 +51,7 @@ public class ChatManager {
 
     this.stateBlocks = new EnumMap<>(Chat.State.class);
     this.secretChatEntries = new ConcurrentHashMap<>();
+    this.messageEntries = new ConcurrentHashMap<>();
     this.activeChat = new SimpleObjectProperty<>(null);
     this.messageHolders = new ConcurrentHashMap<>();
     this.cryptoContexts = new ConcurrentHashMap<>();
@@ -69,6 +71,7 @@ public class ChatManager {
       }
     });
   }
+
 
   public void initObjects(Pane chatHolder,
                           Label chatTitle,
@@ -96,18 +99,7 @@ public class ChatManager {
 
   public void initBehaviour(Runnable onChatOpening,
                             Runnable onChatClosing,
-                            Runnable onChatChanging,
-                            Function<Chat, ChainableFuture<Integer>> onChatRequest,
-                            Function<Chat, ChainableFuture<Integer>> onChatAccept,
-                            Function<Chat, ChainableFuture<Integer>> onChatDisconnect) {
-    Button acceptChatButton = findButtonByState(Chat.State.AWAITING);
-    Button disconnectChatButton = findButtonByState(Chat.State.CONNECTED);
-    Button requestChatButton = findButtonByState(Chat.State.DISCONNECTED);
-
-    Objects.requireNonNull(acceptChatButton, "Accept button not found in awaiting state block");
-    Objects.requireNonNull(disconnectChatButton, "Disconnect button not found in connected state block");
-    Objects.requireNonNull(requestChatButton, "Request button not found in disconnected state block");
-
+                            Runnable onChatChanging) {
     activeChat.addListener((_, oldActiveChat, newActiveChat) -> {
       if (onChatOpening != null && oldActiveChat == null) {
         onChatOpening.run();
@@ -119,42 +111,35 @@ public class ChatManager {
         onChatChanging.run();
       }
     });
+  }
 
-    Map<Button, Runnable> buttonHandlers = Map.of(
-        acceptChatButton,
-        constructHandlerForStateButton(onChatAccept, "FAILED TO ACCEPT"),
-        disconnectChatButton,
-        constructHandlerForStateButton(onChatDisconnect, "FAILED TO DISCONNECT"),
-        requestChatButton,
-        constructHandlerForStateButton(onChatRequest, "FAILED TO REQUEST")
-    );
-
-    for (var entry : buttonHandlers.entrySet()) {
-      Button button = entry.getKey();
-      Runnable handler = entry.getValue();
-      button.setOnMouseClicked(e -> {
-        if (e.getButton().equals(MouseButton.PRIMARY)) {
-          handler.run();
-        }
-      });
+  public void loadChats() throws LocalStorageReadException {
+    throwIfUninitialised();
+    List<Chat> chats = localStorage.getChats();
+    for (Chat chat : chats) {
+      List<Message> messages = localStorage.getMessages(chat.getId());
+      try {
+        createOrReconnect(chat, true);
+        insertMessages(chat.getId(), messages, true);
+      } catch (LocalStorageWriteException ex) {
+        throw new IllegalStateException("Should not be thrown (bug)", ex);
+      }
     }
   }
 
-
   public void reset() {
+    throwIfUninitialised();
     chatHolder.getChildren().clear();
     secretChatEntries.clear();
+    messageEntries.clear();
+    messageHolders.clear();
+    cryptoContexts.clear();
     activeChat.set(null);
-  }
-
-  public void loadChats() {
-    throwIfUninitialised();
-    localStorage.getSecretChats().forEach(this::createOrReconnect);
-    messageHolders.keySet().forEach(chatId -> insertMessages(chatId, localStorage.getMessages(chatId)));
   }
 
 
   public String getActiveChatId() {
+    throwIfUninitialised();
     SecretChatEntry chatEntry = activeChat.get();
     return chatEntry != null ? chatEntry.getChat().getId() : null;
   }
@@ -164,6 +149,13 @@ public class ChatManager {
       return null;
     }
     return secretChatEntries.get(chatId).getChat().getOtherUsername();
+  }
+
+  public Chat.Configuration getChatConfiguration(String chatId) {
+    if (chatId == null) {
+      return null;
+    }
+    return secretChatEntries.get(chatId).getChat().getConfiguration();
   }
 
   public boolean isChatAboutToDelete(String chatId) {
@@ -188,110 +180,87 @@ public class ChatManager {
   }
 
 
-  public void createOrReconnectOnRequesterSide(String chatId, String otherUsername,
-                                               Chat.Configuration config, BigInteger privateKey) {
-    createOrReconnect(new Chat(chatId, otherUsername, config, Chat.State.PENDING, privateKey));
+  public void createOrReconnectOnRequesterSide(String chatId, String otherUsername, Chat.Configuration config,
+                                               BigInteger privateKey) throws LocalStorageWriteException {
+    createOrReconnect(new Chat(chatId, otherUsername, config, Chat.State.PENDING, privateKey), false);
   }
 
-  public void createOrReconnectOnAcceptorSide(String chatId, String otherUsername,
-                                              Chat.Configuration config, BigInteger privateKey) {
-    createOrReconnect(new Chat(chatId, otherUsername, config, Chat.State.AWAITING, privateKey));
+  public void createOrReconnectOnAcceptorSide(String chatId, String otherUsername, Chat.Configuration config,
+                                              BigInteger privateKey) throws LocalStorageWriteException {
+    createOrReconnect(new Chat(chatId, otherUsername, config, Chat.State.AWAITING, privateKey), false);
   }
 
-  public void acceptChat(String chatId, String otherUsername, UnaryOperator<BigInteger> sessionKeyGenerator) {
+  public void acceptChat(String chatId, String otherUsername,
+                         UnaryOperator<BigInteger> sessionKeyGenerator) throws LocalStorageWriteException {
     SecretChatEntry chatEntry = secretChatEntries.getOrDefault(chatId, null);
-    if (chatEntry == null) {
-      log.error("Tried to accept non-existent chat");
-      return;
-    }
-    if (!chatEntry.getChat().getOtherUsername().equals(otherUsername)) {
-      log.error("Tried to accept someone else's chat (got notification from {})", otherUsername);
-      return;
-    }
-
+    throwIfIllegalRequest(chatEntry, otherUsername);
+    BigInteger sessionKey = sessionKeyGenerator.apply(chatEntry.getChat().getKey());
+    localStorage.updateChatConfig(chatId, Chat.State.CONNECTED, sessionKey);
     FxUtil.runOnFxThread(() -> {
-      chatEntry.setConnectedState(sessionKeyGenerator.apply(chatEntry.getChat().getKey()));
+      chatEntry.setConnectedState(sessionKey);
       log.info("Established connection to chat: {}", chatEntry.getChat());
     });
   }
 
-  public void disconnectChat(String chatId, String otherUsername) {
+  public void disconnectChat(String chatId, String otherUsername) throws LocalStorageWriteException {
     SecretChatEntry chatEntry = secretChatEntries.getOrDefault(chatId, null);
-    if (chatEntry == null) {
-      log.error("Tried to disconnect from non-existent chat");
-      return;
-    }
-    if (!chatEntry.getChat().getOtherUsername().equals(otherUsername)) { // TODO: move it to appManager?
-      log.error("Tried to disconnect from someone else's chat (got notification from {})", otherUsername);
-      return;
-    }
-
+    throwIfIllegalRequest(chatEntry, otherUsername);
+    localStorage.updateChatConfig(chatId, Chat.State.DISCONNECTED, null);
     FxUtil.runOnFxThread(() -> {
       chatEntry.setDisconnectedState();
       log.info("Broke connection to chat: {}", chatEntry.getChat());
     });
   }
 
-  public void desertChat(String chatId, String otherUsername) {
+  public void desertChat(String chatId, String otherUsername) throws LocalStorageWriteException {
     SecretChatEntry chatEntry = secretChatEntries.getOrDefault(chatId, null);
-    if (chatEntry == null) {
-      log.error("Tried to make non-existent chat deserted");
-      return;
-    }
-    if (!chatEntry.getChat().getOtherUsername().equals(otherUsername)) {
-      log.error("Tried to make someone else's chat deserted (got notification from {})", otherUsername);
-      return;
-    }
-
+    throwIfIllegalRequest(chatEntry, otherUsername);
+    localStorage.updateChatConfig(chatId, Chat.State.DESERTED, null);
     FxUtil.runOnFxThread(() -> {
       chatEntry.setDesertedState();
       log.info("Chat turned deserted: {}", chatEntry.getChat());
     });
   }
 
-  public void destroyChat(String chatId, String otherUsername) {
+  public void destroyChat(String chatId, String otherUsername)
+      throws LocalStorageWriteException, LocalStorageDeletionException {
     SecretChatEntry chatEntry = secretChatEntries.getOrDefault(chatId, null);
-    if (chatEntry == null) {
-      log.error("Tried to destroy non-existent chat");
-      return;
-    }
-    if (!chatEntry.getChat().getOtherUsername().equals(otherUsername)) {
-      log.error("Tried to destroy someone else's chat (got notification from {})", otherUsername);
-      return;
-    }
-
+    throwIfIllegalRequest(chatEntry, otherUsername);
+    localStorage.updateChatConfig(chatId, Chat.State.DESTROYED, null);
+    localStorage.clearChat(chatId);
     FxUtil.runOnFxThread(() -> {
+      messageHolders.get(chatId).getChildren().clear();
       chatEntry.setDestroyedState();
       log.info("Destroyed chat: {}", chatEntry.getChat());
     });
   }
 
-  public void deleteChat(String chatId) {
+  public void deleteChat(String chatId) throws LocalStorageDeletionException {
     SecretChatEntry chatEntry = secretChatEntries.getOrDefault(chatId, null);
-    if (chatEntry == null) {
-      log.error("Tried to delete non-existent chat");
-      return;
-    }
+    throwIfIllegalRequest(chatEntry);
 
-    String idToDelete = chatEntry.getChat().getId();
+    localStorage.deleteChat(chatId);
     FxUtil.runOnFxThread(() -> {
       activeChat.set(null);
       chatHolder.getChildren().removeIf(node -> node instanceof SecretChatEntry entry &&
-          entry.getChat().getId().equals(idToDelete));
+          entry.getChat().getId().equals(chatId));
     });
 
     secretChatEntries.remove(chatEntry.getChat().getId());
     log.info("Deleted chat: {}", chatEntry.getChat());
   }
 
-  public MessageEntry insertMessage(String chatId, Message message) {
-    if (!secretChatEntries.containsKey(chatId)) {
-      log.error("Tried to insert message into non-existent chat");
-      return null;
+  public void insertMessage(String chatId, Message message,
+                            boolean isLoadedFromDisk) throws LocalStorageWriteException {
+    throwIfIllegalRequest(chatId);
+    if (!isLoadedFromDisk) {
+      localStorage.saveMessage(chatId, message);
     }
 
     MessageEntry messageEntry = new MessageEntry(message);
     VBox messageHolder = messageHolders.get(chatId);
+
+    messageEntries.put(message.getId(), messageEntry);
     FxUtil.runOnFxThread(() -> messageHolder.getChildren().add(messageEntry));
     ChainableFuture.runWeaklyAsync(() -> {
       ConcurrentUtil.sleepSafely(200);
@@ -304,29 +273,85 @@ public class ChatManager {
 
     FxUtil.runOnFxThread(() -> messageEntry.setOnCancel(() ->
         messageHolder.getChildren().remove(messageEntry)));
-
-    return messageEntry;
   }
 
-  public void insertMessages(String chatId, Collection<Message> messages) {
-    if (!secretChatEntries.containsKey(chatId)) {
-      log.error("Tried to insert messages into non-existent chat");
-      return;
+  public void insertMessages(String chatId, Collection<Message> messages,
+                             boolean isLoadedFromDisk) throws LocalStorageWriteException {
+    throwIfIllegalRequest(chatId);
+    for (Message msg : messages) {
+      insertMessage(chatId, msg, isLoadedFromDisk);
     }
-    messages.forEach(msg -> insertMessage(chatId, msg));
+  }
+
+  public void startMessageEncryption(String chatId, String messageId)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.ENCRYPTING);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).startEncryption());
+  }
+
+  public void startMessageEncryption(String chatId, String messageId, CryptoProgress<?> progress)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.ENCRYPTING);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).startEncryption(progress));
+  }
+
+  public void startMessageTransmission(String chatId, String messageId)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.TRANSMITTING);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).startTransmission());
+  }
+
+  public void startMessageTransmission(String chatId, String messageId, HttpMultipartProgress progress)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.TRANSMITTING);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).startTransmission(progress));
+  }
+
+  public void startMessageDecryption(String chatId, String messageId)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.DECRYPTING);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).startDecryption());
+  }
+
+  public void startMessageDecryption(String chatId, String messageId, CryptoProgress<?> progress)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.DECRYPTING);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).startDecryption(progress));
+  }
+
+  public void failMessage(String chatId, String messageId)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.FAILED);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).fail());
+  }
+
+  public void cancelMessage(String chatId, String messageId)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.CANCELLED);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).cancel());
+  }
+
+  public void completeMessage(String chatId, String messageId)
+      throws LocalStorageWriteException {
+    localStorage.updateMessageState(messageId, chatId, Message.State.SENT);
+    FxUtil.runOnFxThread(() -> messageEntries.get(messageId).complete());
   }
 
 
 
-  private void createOrReconnect(Chat chat) {
+  private void createOrReconnect(Chat chat, boolean isLoadedFromDisk) throws LocalStorageWriteException {
     throwIfUninitialised();
+    if (!isLoadedFromDisk) {
+      localStorage.saveChatConfig(chat);
+    }
     SecretChatEntry chatEntry = secretChatEntries.getOrDefault(chat.getId(), null);
     if (chatEntry != null) {
       switch (chat.getState()) {
         case PENDING -> chatEntry.setPendingState(chat.getKey());
         case AWAITING -> chatEntry.setAwaitingState(chat.getKey());
-        default -> log.error("Got illegal chat state for creation or reconnecting");
+        default -> throw new IllegalChatManagerRequest("Illegal chat state for creation or reconnection");
       }
+      localStorage.updateChatConfig(chat.getId(), chat.getState(), chat.getKey());
       return;
     }
 
@@ -354,6 +379,8 @@ public class ChatManager {
     });
   }
 
+
+
   private void onSecretChatEntryClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY) &&
         e.getSource() instanceof SecretChatEntry entry) {
@@ -361,30 +388,29 @@ public class ChatManager {
     }
   }
 
-  private Button findButtonByState(Chat.State state) {
-    return stateBlocks.get(state).getChildren().stream()
-        .map(node -> node instanceof Button button ? button : null)
-        .filter(Objects::nonNull)
-        .findAny().orElse(null);
-  }
-
-  private Runnable constructHandlerForStateButton(Function<Chat, ChainableFuture<Integer>> rawHandler,
-                                                  String errorMessage) {
-    if (rawHandler == null) {
-      return () -> {};
-    }
-    return () -> rawHandler.apply(activeChat.get().getChat())
-        .thenWeaklyConsumeAsync(status -> FxUtil.runOnFxThread(() -> {
-          // TODO: notification
-          if (status != 200) {
-            log.error("{}: code {}", errorMessage, status);
-          }
-        }));
-  }
-
   private void throwIfUninitialised() {
     if (chatHolder == null) {
-      throw new IllegalStateException("ChatManager is uninitialised");
+      throw new ModuleUninitialisedStateException("ChatManager is uninitialised");
+    }
+  }
+
+  private void throwIfIllegalRequest(String chatId) {
+    throwIfIllegalRequest(secretChatEntries.getOrDefault(chatId, null));
+  }
+
+  private void throwIfIllegalRequest(SecretChatEntry chatEntry) {
+    if (chatEntry == null) {
+      throw new IllegalChatManagerRequest("Illegal chat request (chatEntry is null)");
+    }
+  }
+
+  private void throwIfIllegalRequest(SecretChatEntry chatEntry, String otherUsername) {
+    throwIfIllegalRequest(chatEntry);
+    String expectedOtherUsername = chatEntry.getChat().getOtherUsername();
+    if (!expectedOtherUsername.equals(otherUsername)) {
+      throw new IllegalChatManagerRequest(
+          "Illegal chat request (expected otherUsername '%s' but got '%s'"
+              .formatted(expectedOtherUsername, otherUsername));
     }
   }
 }

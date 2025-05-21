@@ -170,8 +170,8 @@ public final class Bits {
     if (offset + 7 >= bytes.length) {
       throw new IllegalArgumentException("Not enough space to unpack");
     }
-    unpackIntToBigEndian((int) (value >>> 32), bytes, 0);
-    unpackIntToBigEndian((int) value, bytes, 4);
+    unpackIntToBigEndian((int) (value >>> 32), bytes, offset);
+    unpackIntToBigEndian((int) value, bytes, offset + 4);
   }
 
   public static byte[] unpackIntToBigEndian(int value) {
@@ -200,8 +200,8 @@ public final class Bits {
     if (offset + 7 >= bytes.length) {
       throw new IllegalArgumentException("Not enough space to unpack");
     }
-    unpackIntToLittleEndian((int) value, bytes, 0);
-    unpackIntToLittleEndian((int) (value >>> 32), bytes, 4);
+    unpackIntToLittleEndian((int) value, bytes, offset);
+    unpackIntToLittleEndian((int) (value >>> 32), bytes, offset + 4);
   }
 
   public static byte[] unpackIntToLittleEndian(int value) {

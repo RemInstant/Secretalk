@@ -10,11 +10,10 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.rgielen.fxweaver.core.FxWeaver;
 import org.reminstant.concurrent.ChainExecutionException;
-import org.reminstant.concurrent.ChainTransportIntException;
+import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.concurrent.functions.ThrowingFunction;
@@ -28,10 +27,10 @@ import org.reminstant.secretalk.client.dto.DHResponse;
 import org.reminstant.secretalk.client.dto.JwtResponse;
 import org.reminstant.secretalk.client.dto.NoPayloadResponse;
 import org.reminstant.secretalk.client.dto.UserEventWrapperResponse;
-import org.reminstant.secretalk.client.exception.InvalidServerAnswer;
 import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.model.Chat;
 import org.reminstant.secretalk.client.model.event.*;
+import org.reminstant.secretalk.client.repository.LocalStorage;
 import org.reminstant.secretalk.client.util.FxUtil;
 import org.springframework.stereotype.Component;
 
@@ -45,7 +44,6 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 import static java.nio.file.StandardOpenOption.*;
@@ -58,8 +56,6 @@ public class ApplicationStateManager {
   private static final int DH_PRIVATE_KEY_BIT_LENGTH = 512;
   private static final int FILE_PART_SIZE = 512;
 
-  private static final String CONNECTION_FAILURE_LOG = "Failed to connect to the http server";
-  private static final String INVALID_SERVER_ANSWER_LOG = "Got invalid server answer";
   private static final String DIFFIE_HELLMAN_NOT_INIT_LOG = "DiffieHellmanGenerator is uninitialised";
 
   private static final ThrowingFunction<Exception, Integer> defaultHandler;
@@ -70,10 +66,12 @@ public class ApplicationStateManager {
 
   private final AtomicBoolean isEventCycleWorking;
   private final Map<String, MessageLoadBundle> currentLoads;
+  private final LocalStorage localStorage;
 
   private Stage stage = null;
   private Scene loginScene = null;
   private Scene mainScene = null;
+  private ChainableFuture<?> eventCycleFuture = null;
   private DiffieHellmanGenerator dh = null;
 
   static {
@@ -83,13 +81,41 @@ public class ApplicationStateManager {
         rawEx = ex;
       }
       return switch (rawEx) {
-        case IOException ex -> {
-          log.error(CONNECTION_FAILURE_LOG, ex);
-          yield 0;
-        }
         case InvalidServerAnswer ex -> {
-          log.error(INVALID_SERVER_ANSWER_LOG, ex);
+          log.error("Got invalid server answer", ex);
           yield 602;
+        }
+        case LocalStorageReadException ex -> {
+          log.error("Failed to read data from the local storage", ex);
+          yield 603;
+        }
+        case LocalStorageWriteException ex -> {
+          log.error("Failed to write data into the local storage", ex);
+          yield 604;
+        }
+        case LocalStorageTmpFileException ex -> {
+          log.error("Failed to create tmp file in the local storage", ex);
+          yield 605;
+        }
+        case ModuleInitialisationException ex -> {
+          log.error("Failed to initialise one of app modules", ex);
+          yield 606;
+        }
+        case IllegalChatManagerRequest ex -> {
+          log.error("Got illegal chat request (probably foreign)", ex);
+          yield 607;
+        }
+        case LocalStorageDeletionException ex -> {
+          log.error("Failed to delete file in the local storage", ex);
+          yield 608;
+        }
+        case ModuleUninitialisedStateException ex -> {
+          log.error("Accessed an uninitialised module", ex);
+          yield 609;
+        }
+        case IOException ex -> {
+          log.error("Failed to connect to the http server", ex);
+          yield 0;
         }
         case ChainTransportIntException ex -> ex.getCargo();
         default -> throw rawEx;
@@ -99,40 +125,39 @@ public class ApplicationStateManager {
 
   public ApplicationStateManager(FxWeaver fxWeaver,
                                  ServerClient serverClient,
-                                 ChatManager chatManager) {
+                                 ChatManager chatManager, LocalStorage localStorage) {
     this.fxWeaver = fxWeaver;
     this.serverClient = serverClient;
     this.chatManager = chatManager;
 
     this.isEventCycleWorking = new AtomicBoolean(false);
     this.currentLoads = new HashMap<>();
+    this.localStorage = localStorage;
   }
 
   public void init(Stage stage) {
     this.stage = stage;
     stage.setTitle("123");
-//    showLoginScene(); // NOSONAR
-    showMainScene(); // NOSONAR
-    chatManager.loadChats(); // NOSONAR
-    serverClient.saveCredentials("anonymous", ""); // NOSONAR
+    showLoginScene(); // NOSONAR
+//    showMainScene(); // NOSONAR
+    try {
+//      localStorage.init("anonymous"); // NOSONAR
+//      chatManager.loadChats(); // NOSONAR
+    } catch (Exception ex) {
+      try {
+        defaultHandler.apply(ex);
+      } catch (Exception ex2) {
+        log.error("Got unexpected exception", ex2);
+      }
+    }
+//    serverClient.saveCredentials("anonymous", ""); // NOSONAR
   }
 
   public void initChatManager(Pane chatHolder, Label chatTitle,
                               StackPane chatStateBlockHolder, ScrollPane messageHolderWrapper,
                               Runnable onChatOpening, Runnable onChatClosing, Runnable onChatChanging) {
-    Function<Chat, ChainableFuture<Integer>> onChatRequest =
-        chat -> processChatRequest(chat.getId(), chat.getOtherUsername(), chat.getConfiguration());
-
-    Function<Chat, ChainableFuture<Integer>> onChatAccept =
-        chat -> processChatAcceptance(chat.getId(), chat.getOtherUsername());
-
-    Function<Chat, ChainableFuture<Integer>> onChatDisconnect =
-        chat -> processChatDisconnect(chat.getId(), chat.getOtherUsername());
-
     chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper);
-    chatManager.initBehaviour(
-        onChatOpening, onChatClosing, onChatChanging,
-        onChatRequest, onChatAccept, onChatDisconnect);
+    chatManager.initBehaviour(onChatOpening, onChatClosing, onChatChanging);
     log.info("ChatManager INITIALIZED");
   }
 
@@ -140,13 +165,19 @@ public class ApplicationStateManager {
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           JwtResponse jwtResponse = serverClient.processLogin(username, password);
-          throwTransportIfStatusNotOk(jwtResponse.getStatus());
+          if (jwtResponse.getStatus() != 200) {
+            return jwtResponse.getStatus();
+          }
 
           DHResponse dhResponse = serverClient.getDHParams();
-          throwTransportIfStatusNotOk(dhResponse.getStatus());
+          if (dhResponse.getStatus() != 200) {
+            return dhResponse.getStatus();
+          }
 
           dh = new DiffieHellmanGenerator(dhResponse.getPrime(), dhResponse.getGenerator());
           serverClient.saveCredentials(username, jwtResponse.getToken());
+
+          localStorage.init(username);
 
           log.info("LOGGED AS {}", username);
           showMainScene();
@@ -184,7 +215,7 @@ public class ApplicationStateManager {
     return processChatRequest(chatId, otherUsername, config);
   }
 
-  public ChainableFuture<Integer> processChatDeserting() {
+  public ChainableFuture<Integer> processActiveChatDesertion() {
     String chatId = chatManager.getActiveChatId();
     boolean isChatAboutToDelete = chatManager.isChatAboutToDelete(chatId);
     String otherUsername = chatManager.getChatOtherUsername(chatId);
@@ -206,7 +237,7 @@ public class ApplicationStateManager {
         .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public ChainableFuture<Integer> processChatDestroying() {
+  public ChainableFuture<Integer> processActiveChatDestruction() {
     String chatId = chatManager.getActiveChatId();
     boolean isChatAboutToDelete = chatManager.isChatAboutToDelete(chatId);
     String otherUsername = chatManager.getChatOtherUsername(chatId);
@@ -226,6 +257,13 @@ public class ApplicationStateManager {
           return 200;
         })
         .thenWeaklyHandleAsync(defaultHandler);
+  }
+
+  public ChainableFuture<Integer> processActiveChatRequest() {
+    String chatId = chatManager.getActiveChatId();
+    String otherUsername = chatManager.getChatOtherUsername(chatId);
+    Chat.Configuration config = chatManager.getChatConfiguration(chatId);
+    return processChatRequest(chatId, otherUsername, config);
   }
 
   public ChainableFuture<Integer> processChatRequest(String chatId, String otherUsername,
@@ -248,6 +286,12 @@ public class ApplicationStateManager {
           return 200;
         })
         .thenWeaklyHandleAsync(defaultHandler);
+  }
+
+  public ChainableFuture<Integer> processActiveChatAcceptance() {
+    String chatId = chatManager.getActiveChatId();
+    String otherUsername = chatManager.getChatOtherUsername(chatId);
+    return processChatAcceptance(chatId, otherUsername);
   }
 
   public ChainableFuture<Integer> processChatAcceptance(String chatId, String otherUsername) {
@@ -273,7 +317,13 @@ public class ApplicationStateManager {
         .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public ChainableFuture<Integer> processChatDisconnect(String chatId, String otherUsername) {
+  public ChainableFuture<Integer> processActiveChatDisconnection() {
+    String chatId = chatManager.getActiveChatId();
+    String otherUsername = chatManager.getChatOtherUsername(chatId);
+    return processChatDisconnection(chatId, otherUsername);
+  }
+
+  public ChainableFuture<Integer> processChatDisconnection(String chatId, String otherUsername) {
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           NoPayloadResponse response = serverClient.breakChatConnection(chatId, otherUsername);
@@ -292,31 +342,29 @@ public class ApplicationStateManager {
     byte[] data = messageText.getBytes();
     String messageId = UUID.randomUUID().toString();
     Path filePath = file != null ? file.toPath() : null;
-
+    String fileName = file != null ? file.getName() : null;
     Message message = new Message(
         messageId, messageText, serverClient.getUsername(), filePath, true);
-    MessageEntry messageEntry = chatManager.insertMessage(chatId, message);
 
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
-          Path encTmpFilePath = null;
-          String fileName = file != null ? file.getName() : null;
-
+          chatManager.insertMessage(chatId, message, false);
           CryptoProgress<byte[]> textProgress = cryptoContext.encryptAsync(data);
-          FxUtil.runOnFxThread(messageEntry::startEncrypting);
+          chatManager.startMessageEncryption(chatId, messageId, textProgress);
           byte[] encText = textProgress.getResult();
 
+          Path encTmpFilePath = null;
           if (file != null) {
             encTmpFilePath = Files.createTempFile(fileName, "enc");
             String in = file.getPath();
             String out = encTmpFilePath.toString();
             CryptoProgress<Void> fileProgress = cryptoContext.encryptAsync(in, out);
-            FxUtil.runOnFxThread(() -> messageEntry.startEncrypting(fileProgress));
+            chatManager.startMessageEncryption(chatId, messageId, fileProgress);
             fileProgress.getResult();
           }
 
           Thread.sleep(200);
-          FxUtil.runOnFxThread(messageEntry::startTransmission);
+          chatManager.startMessageTransmission(chatId, messageId);
           NoPayloadResponse response = serverClient
               .sendChatMessage(messageId, chatId, otherUsername, encText, fileName);
           throwTransportIfStatusNotOk(response.getStatus());
@@ -324,19 +372,15 @@ public class ApplicationStateManager {
           if (file != null) {
             HttpMultipartProgress httpProgress = processSendingFilePartly(
                 messageId, chatId, otherUsername, encTmpFilePath);
-            FxUtil.runOnFxThread(() -> messageEntry.startTransmission(httpProgress));
+            chatManager.startMessageTransmission(chatId, messageId, httpProgress);
             int status = httpProgress.getResult();
             throwTransportIfStatusNotOk(status);
           }
 
-          FxUtil.runOnFxThread(messageEntry::complete);
+          chatManager.completeMessage(chatId, messageId);
           return 200;
         })
-        .thenWeaklyHandleAsync(ex -> {
-          FxUtil.runOnFxThread(messageEntry::fail);
-          log.error("Some ex", ex);
-          return 600;
-        });
+        .thenWeaklyHandleAsync(defaultHandler);
   }
 
 
@@ -344,35 +388,27 @@ public class ApplicationStateManager {
   private HttpMultipartProgress processSendingFilePartly(String messageId, String chatId,
                                                          String otherUser, Path path) {
     HttpMultipartProgress progress = new HttpMultipartProgress();
-    ChainableFuture<Integer> future = ChainableFuture.supplyWeaklyAsync(() -> {
-      try (FileChannel fileChannel = FileChannel.open(path, READ, DELETE_ON_CLOSE)) {
-        int partCnt = (int) Math.ceil(1. * fileChannel.size() / FILE_PART_SIZE);
-        progress.setRequestsCount(partCnt);
+    ChainableFuture<Integer> future = ChainableFuture
+        .supplyWeaklyAsync(() -> {
+          try (FileChannel fileChannel = FileChannel.open(path, READ, DELETE_ON_CLOSE)) {
+            int partCnt = (int) Math.ceil(1. * fileChannel.size() / FILE_PART_SIZE);
+            progress.setRequestsCount(partCnt);
 
-        for (int i = 0; i < partCnt; ++i) {
-          byte[] part = new byte[FILE_PART_SIZE];
-          int read = fileChannel.read(ByteBuffer.wrap(part));
-          if (read < FILE_PART_SIZE) {
-            part = Arrays.copyOf(part, read);
-          }
-          try {
-            NoPayloadResponse response = serverClient
-                .sendFilePart(messageId, chatId, otherUser, i, partCnt, part);
-            if (response.getStatus() != 200) {
-              return response.getStatus();
+            for (int i = 0; i < partCnt; ++i) {
+              byte[] part = new byte[FILE_PART_SIZE];
+              int read = fileChannel.read(ByteBuffer.wrap(part));
+              if (read < FILE_PART_SIZE) {
+                part = Arrays.copyOf(part, read);
+              }
+              NoPayloadResponse response = serverClient
+                  .sendFilePart(messageId, chatId, otherUser, i, partCnt, part);
+              throwTransportIfStatusNotOk(response.getStatus());
+              progress.incrementProcessedBlocksCount();
             }
-          } catch (IOException ex) {
-            log.error(CONNECTION_FAILURE_LOG, ex);
-            return 0;
-          } catch (InvalidServerAnswer ex) {
-            log.error(INVALID_SERVER_ANSWER_LOG, ex);
-            return 602;
+            return 200;
           }
-          progress.incrementProcessedBlocksCount();
-        }
-        return 200;
-      }
-    });
+        })
+        .thenWeaklyHandleAsync(defaultHandler);
     progress.setFuture(future);
     return progress;
   }
@@ -380,9 +416,10 @@ public class ApplicationStateManager {
 
   private void startEventCycle() {
     isEventCycleWorking.set(true);
-    CompletableFuture.runAsync(() -> {
+    eventCycleFuture = ChainableFuture.runWeaklyAsync(() -> {
+      log.debug("Event cycle is started");
       while (isEventCycleWorking.get()) {
-        boolean isOk = true;
+        boolean isOk;
         try {
           isOk = doEventCycle();
         } catch (Exception ex) {
@@ -390,21 +427,27 @@ public class ApplicationStateManager {
           isOk = false;
         }
         if (!isOk) {
-          ConcurrentUtil.sleepSafely(1000);
+          ConcurrentUtil.sleepSafely(5000);
         }
       }
+      log.debug("Event cycle is stopped");
     });
   }
 
   private void stopEventCycle() {
     isEventCycleWorking.set(false);
+    if (eventCycleFuture != null) {
+      eventCycleFuture.cancel(true);
+    }
   }
 
-  private boolean doEventCycle() {
-    UserEvent rawEvent;
+  private boolean doEventCycle() throws Exception {
+    UserEvent rawEvent = null;
     try {
       UserEventWrapperResponse wrapper = serverClient.getEvent(EVENT_CYCLE_TIMEOUT);
-      rawEvent = UserEvent.getEvent(wrapper.getEventType(), wrapper.getEventJson().getBytes());
+      if (!Thread.interrupted()) {
+        rawEvent = UserEvent.getEvent(wrapper.getEventType(), wrapper.getEventJson().getBytes());
+      }
     } catch (JsonProcessingException ex) {
       log.error("Event cycle failed to parse event", ex);
       return false;
@@ -417,21 +460,30 @@ public class ApplicationStateManager {
     }
 
     if (!isEventCycleWorking.get()) {
-      log.debug("ignored event: {}", rawEvent);
+      if (rawEvent != null) {
+        log.debug("ignored event: {}", rawEvent);
+      }
       return true;
     }
 
-    log.debug("got event: {}", rawEvent);
-    switch (rawEvent) {
-      case VoidEvent _ -> { return true; }
-      case ChatDesertEvent e -> handleChatDesertEvent(e);
-      case ChatDestroyEvent e -> handleChatDestroyEvent(e);
-      case ChatConnectionRequestEvent e -> handleChatConnectionRequestEvent(e);
-      case ChatConnectionAcceptEvent e -> handleChatConnectionAcceptEvent(e);
-      case ChatConnectionBreakEvent e -> handleChatConnectionBreakEvent(e);
-      case ChatMessageEvent e -> handleChatMessageEvent(e);
-      case ChatFileEvent e -> handleChatFileEvent(e);
-      default -> {} // NOSONAR
+    if (rawEvent instanceof VoidEvent) {
+      return true;
+    }
+
+    log.debug("got event: {} ", rawEvent);
+    try {
+      switch (rawEvent) {
+        case ChatDesertEvent e -> handleChatDesertEvent(e);
+        case ChatDestroyEvent e -> handleChatDestroyEvent(e);
+        case ChatConnectionRequestEvent e -> handleChatConnectionRequestEvent(e);
+        case ChatConnectionAcceptEvent e -> handleChatConnectionAcceptEvent(e);
+        case ChatConnectionBreakEvent e -> handleChatConnectionBreakEvent(e);
+        case ChatMessageEvent e -> handleChatMessageEvent(e);
+        case ChatFileEvent e -> handleChatFileEvent(e);
+        default -> { } // NOSONAR
+      }
+    } catch (Exception ex) {
+      defaultHandler.apply(ex);
     }
 
     try {
@@ -451,15 +503,17 @@ public class ApplicationStateManager {
     return true;
   }
 
-  private void handleChatDesertEvent(ChatDesertEvent event) {
+  private void handleChatDesertEvent(ChatDesertEvent event) throws LocalStorageWriteException {
     chatManager.desertChat(event.getChatId(), event.getSenderUsername());
   }
 
-  private void handleChatDestroyEvent(ChatDestroyEvent event) {
+  private void handleChatDestroyEvent(ChatDestroyEvent event)
+      throws LocalStorageWriteException, LocalStorageDeletionException {
     chatManager.destroyChat(event.getChatId(), event.getSenderUsername());
   }
 
-  private void handleChatConnectionRequestEvent(ChatConnectionRequestEvent event) {
+  private void handleChatConnectionRequestEvent(ChatConnectionRequestEvent event)
+      throws LocalStorageWriteException {
     String chatId = event.getChatId();
     String otherUsername = event.getRequesterUsername();
     Chat.Configuration config = event.getChatConfiguration();
@@ -468,7 +522,8 @@ public class ApplicationStateManager {
     chatManager.createOrReconnectOnAcceptorSide(chatId, otherUsername, config, publicKey);
   }
 
-  private void handleChatConnectionAcceptEvent(ChatConnectionAcceptEvent event) {
+  private void handleChatConnectionAcceptEvent(ChatConnectionAcceptEvent event)
+      throws LocalStorageWriteException {
     String chatId = event.getChatId();
     String otherUsername = event.getAcceptorUsername();
     BigInteger otherPublicKey = new BigInteger(event.getPublicKey());
@@ -477,53 +532,49 @@ public class ApplicationStateManager {
     chatManager.acceptChat(chatId, otherUsername, generator);
   }
 
-  private void handleChatConnectionBreakEvent(ChatConnectionBreakEvent event) {
+  private void handleChatConnectionBreakEvent(ChatConnectionBreakEvent event)
+      throws LocalStorageWriteException {
     chatManager.disconnectChat(event.getChatId(), event.getSenderUsername());
   }
 
-  private void handleChatMessageEvent(ChatMessageEvent event) {
+  private void handleChatMessageEvent(ChatMessageEvent event)
+      throws LocalStorageTmpFileException, LocalStorageWriteException {
     Path filePath = null;
     if (event.getAttachedFileName() != null) {
-      try {
-        filePath = Files.createTempFile(
-            Path.of("/home/remi/Code"), event.getAttachedFileName() + "_", "");
-      } catch (IOException e) {
-        log.error("FAILED TO HANDLE MESSAGE DUE TO FILE CREATING ERROR");
-        return;
-      }
+      filePath = localStorage.createTmpFile(event.getAttachedFileName() + "_", "");
     }
 
+    String chatId = event.getChatId();
     SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(event.getChatId());
-
     String text = new String(cryptoContext.decrypt(event.getMessageData()));
     Message message = new Message(event.getMessageId(), text,
         event.getSenderUsername(), filePath, false);
-    MessageEntry messageEntry = chatManager.insertMessage(event.getChatId(), message);
 
-    if (messageEntry == null) {
-      return;
-    }
+    chatManager.insertMessage(event.getChatId(), message, false);
 
     if (filePath == null) {
-      messageEntry.complete();
+      chatManager.completeMessage(chatId, message.getId());
     } else {
       Path loadPath = Path.of(filePath + "_encrypted");
       HttpMultipartProgress httpProgress = new HttpMultipartProgress();
-      messageEntry.startTransmission(httpProgress);
+      chatManager.startMessageTransmission(chatId, message.getId(), httpProgress);
       currentLoads.put(event.getMessageId(),
-          new MessageLoadBundle(messageEntry, httpProgress, loadPath));
+          new MessageLoadBundle(message.getId(), httpProgress, loadPath, filePath));
     }
   }
 
-  void handleChatFileEvent(ChatFileEvent event) {
+  private void handleChatFileEvent(ChatFileEvent event) throws LocalStorageWriteException {
     MessageLoadBundle bundle = currentLoads.getOrDefault(event.getMessageId(), null);
     if (bundle == null) {
       log.error("Got unexpected file part");
       return;
     }
 
-    if (bundle.getHttpProgress().getProgress() == 0) {
-      bundle.getHttpProgress().setRequestsCount(event.getPartCount());
+    String chatId = event.getChatId();
+    String messageId = event.getMessageId();
+
+    if (bundle.httpProgress().getProgress() == 0) {
+      bundle.httpProgress().setRequestsCount(event.getPartCount());
     }
 
     try (FileChannel fileChannel = FileChannel.open(bundle.loadPath, CREATE, WRITE)) {
@@ -534,18 +585,24 @@ public class ApplicationStateManager {
       }
     } catch (IOException ex) {
       log.error("File writing error", ex);
-      bundle.getMessageEntry().fail(); // TODO: remove bundle
+      currentLoads.remove(event.getMessageId());
+      chatManager.failMessage(chatId, messageId);
     }
 
-    bundle.getHttpProgress().incrementProcessedBlocksCount();
+    bundle.httpProgress().incrementProcessedBlocksCount();
 
-    if (bundle.getHttpProgress().isDone()) {
+    if (bundle.httpProgress().isDone()) {
       SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(event.getChatId());
       String in = bundle.loadPath.toString();
-      String out = bundle.messageEntry.getMessage().getFilePath().toString();
+      String out = bundle.resultPath.toString();
       CryptoProgress<Void> progress = cryptoContext.decryptAsync(in, out);
-      bundle.messageEntry.startDecrypting(progress);
-      progress.getFuture().thenWeaklyRunAsync(() -> FxUtil.runOnFxThread(bundle.messageEntry::complete));
+      chatManager.startMessageDecryption(chatId, messageId, progress);
+      progress.getFuture()
+          .thenWeaklySupplyAsync(() -> {
+            chatManager.completeMessage(chatId, messageId);
+            return 200;
+          })
+          .thenWeaklyHandleAsync(defaultHandler);
     }
   }
 
@@ -596,17 +653,10 @@ public class ApplicationStateManager {
     }
   }
 
-  @Getter
-  private static class MessageLoadBundle {
-
-    private final MessageEntry messageEntry;
-    private final HttpMultipartProgress httpProgress;
-    private final Path loadPath;
-
-    public MessageLoadBundle(MessageEntry messageEntry, HttpMultipartProgress httpProgress, Path loadPath) {
-      this.messageEntry = messageEntry;
-      this.httpProgress = httpProgress;
-      this.loadPath = loadPath;
-    }
+  private record MessageLoadBundle(
+      String messageId,
+      HttpMultipartProgress httpProgress,
+      Path loadPath,
+      Path resultPath) {
   }
 }

@@ -1,41 +1,556 @@
 package org.reminstant.secretalk.client.repository;
 
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.reminstant.cryptography.Bits;
+import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.model.Chat;
+import org.reminstant.secretalk.client.util.ObjectMappers;
 import org.springframework.stereotype.Repository;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Stream;
 
+import static java.nio.file.StandardOpenOption.*;
+
+@Slf4j
 @Repository
 public class LocalStorage {
 
-  public List<Chat> getSecretChats() {
-    // TODO:
-    return List.of(
-        new Chat("1", "abobaChat", Chat.State.CONNECTED),
-        new Chat("2", "meowChat", Chat.State.AWAITING),
-        new Chat("3", "meowChat", Chat.State.PENDING),
-        new Chat("4", "meowChat", Chat.State.DISCONNECTED),
-        new Chat("5", "meowChat", Chat.State.DESERTED),
-        new Chat("6", "meowChat", Chat.State.DESTROYED));
+  record FileLocation(
+      long begin,
+      int length) {
   }
 
-  public List<Message> getMessages(String chatId) {
-    if (chatId.equals("3")) {
-      return List.of(
-          new Message("1", "TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT", "aboba", true),
-          new Message("2", "TEXT TEXT TEXT", "aboba", Path.of("/home/remi/Code/abc.png"), true),
-          new Message("3", "TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT TEXT", "aboba", false),
-          new Message("4", "TEXT TEXT TEXT", "aboba", false),
-          new Message("5", "TEXT TEXT TEXT", "aboba", true)
-      );
-    }
-    if (chatId.equals("5")) {
-      return List.of(new Message("6", "PLEASE DO NOT DELETE MMEEEEE", "deserted chat", false));
-    }
-    return List.of();
+  private static final Path HOME_PATH = Path.of(System.getProperty("user.home"));
+  private static final int MESSAGE_ID_BYTE_LENGTH = 36;
+  private static final int AUTHOR_BYTE_LENGTH = 32;
+  private static final int MESSAGE_CONFIG_LENGTH = 94;
+
+  private final Map<String, ReadWriteLock> chatLocks;
+  private final Map<String, Long> messageConfigPositions;
+
+  private String username;
+
+
+  public LocalStorage() {
+    this.chatLocks = new ConcurrentHashMap<>();
+    this.messageConfigPositions = new ConcurrentHashMap<>();
   }
 
-//  private static Path
+  public void init(String username) throws ModuleInitialisationException {
+    this.username = username;
+
+    try {
+      createDirectoryIfNotExist(getAppPath());
+      createDirectoryIfNotExist(getUserFolderPath());
+
+      indexStorage(getUserFolderPath());
+    } catch (IOException ex) {
+      throw new ModuleInitialisationException("Failed to initialise local storage", ex);
+    }
+
+
+    log.info("LocalStorage INITIALIZED");
+  }
+
+  public void reset() {
+    this.username = null;
+  }
+
+  public Path createTmpFile(String prefix, String postfix) throws LocalStorageTmpFileException {
+    throwIfUninitialised();
+
+    try {
+      Path tmpDirPath = getTmpPath();
+      createDirectoryIfNotExist(tmpDirPath);
+      return Files.createTempFile(tmpDirPath, prefix, postfix);
+    } catch (IOException ex) {
+      throw new LocalStorageTmpFileException("Failed to create tmp file", ex);
+    }
+  }
+
+
+
+  public Optional<Chat> getChatByChatId(String chatId) throws LocalStorageReadException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.readLock().lock();
+
+    Path chatConfigPath = getChatConfigPath(chatId);
+
+    if (!Files.exists(chatConfigPath)) {
+      return Optional.empty();
+    }
+
+    try {
+      return Optional.of(ObjectMappers.bigNumberObjectMapper.readValue(chatConfigPath.toFile(), Chat.class));
+    } catch (IOException ex) {
+      throw new LocalStorageReadException("Failed to read chat config", ex);
+    } finally {
+      lock.readLock().unlock();
+    }
+  }
+
+  public List<Chat> getChats() throws LocalStorageReadException {
+    throwIfUninitialised();
+
+    List<String> chatIds;
+    try {
+      chatIds = getChatIds(getUserFolderPath());
+    } catch (IOException ex) {
+      throw new LocalStorageReadException("Failed to read chats config", ex);
+    }
+
+    List<Chat> chats = new ArrayList<>();
+    for (String chatId : chatIds) {
+      ReadWriteLock lock = getChatLock(chatId);
+      lock.readLock().lock();
+      try {
+        chats.add(ObjectMappers.bigNumberObjectMapper
+            .readValue(getChatConfigPath(chatId).toFile(), Chat.class));
+      } catch (IOException ex) {
+        throw new LocalStorageReadException("Failed to read chat configs", ex);
+      } finally {
+        lock.readLock().unlock();
+      }
+    }
+    return chats;
+  }
+
+  public void saveChatConfig(Chat chat) throws LocalStorageWriteException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chat.getId());
+    lock.writeLock().lock();
+
+    try {
+      createDirectoryIfNotExist(getChatFolderPath(chat.getId()));
+
+      File file = getChatConfigPath(chat.getId()).toFile();
+      ObjectMappers.bigNumberObjectMapper.writerWithDefaultPrettyPrinter().writeValue(file, chat);
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to save chat config", ex);
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+  public void updateChatConfig(String chatId, Chat.State state)
+      throws LocalStorageWriteException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.writeLock().lock();
+
+    Path chatConfigPath = getChatConfigPath(chatId);
+
+    if (!Files.exists(chatConfigPath)) {
+      throw new LocalStorageWriteException("No such chat config file");
+    }
+
+    try {
+      File file = chatConfigPath.toFile();
+      Chat chat = ObjectMappers.bigNumberObjectMapper.readValue(file, Chat.class);
+      chat.setState(state);
+      ObjectMappers.bigNumberObjectMapper.writerWithDefaultPrettyPrinter().writeValue(file, chat);
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to update chat config", ex);
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+  public void updateChatConfig(String chatId, Chat.State state, BigInteger key)
+      throws LocalStorageWriteException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.writeLock().lock();
+
+    Path chatConfigPath = getChatConfigPath(chatId);
+
+    if (!Files.exists(chatConfigPath)) {
+      throw new LocalStorageWriteException("No such chat config file");
+    }
+
+    try {
+      File file = chatConfigPath.toFile();
+      Chat chat = ObjectMappers.bigNumberObjectMapper.readValue(file, Chat.class);
+      chat.setState(state);
+      chat.setKey(key);
+      ObjectMappers.bigNumberObjectMapper.writerWithDefaultPrettyPrinter().writeValue(file, chat);
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to update chat config", ex);
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+  public void clearChat(String chatId) throws LocalStorageDeletionException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.writeLock().lock();
+
+    Path chatStaticDataPath = getStaticDataPath(chatId);
+    Path chatDynamicDataPath = getDynamicDataPath(chatId);
+
+    try {
+      Files.delete(chatStaticDataPath);
+      Files.delete(chatDynamicDataPath);
+    } catch (Exception e) {
+      throw new LocalStorageDeletionException("Failed to delete chat data");
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+  public void deleteChat(String chatId) throws LocalStorageDeletionException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.writeLock().lock();
+
+    Path chatFolderPath = getChatFolderPath(chatId);
+
+    try {
+      Files.walkFileTree(chatFolderPath, new FileDeleteVisitor());
+    } catch (Exception e) {
+      throw new LocalStorageDeletionException("Failed to delete chat");
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+
+  public Optional<Message> readMessageById(String chatId, String messageId)
+      throws LocalStorageReadException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.readLock().lock();
+
+    try {
+      Path staticDataPath = getStaticDataPath(chatId);
+      Path dynamicDataPath = getDynamicDataPath(chatId);
+      return readMessageById(staticDataPath, dynamicDataPath, messageId);
+    } catch (IOException ex) {
+      throw new LocalStorageReadException("Failed to read message", ex);
+    } finally {
+      lock.readLock().unlock();
+    }
+  }
+
+  public List<Message> getMessages(String chatId) throws LocalStorageReadException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.readLock().lock();
+
+    try {
+      Path staticDataPath = getStaticDataPath(chatId);
+      Path dynamicDataPath = getDynamicDataPath(chatId);
+      return readMessages(staticDataPath, dynamicDataPath);
+    } catch (IOException ex) {
+      throw new LocalStorageReadException("Failed to read messages", ex);
+    } finally {
+      lock.readLock().unlock();
+    }
+  }
+
+  public void saveMessage(String chatId, Message message) throws LocalStorageWriteException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.writeLock().lock();
+
+    try {
+      Path staticDataPath = getStaticDataPath(chatId);
+      Path dynamicDataPath = getDynamicDataPath(chatId);
+
+      FileLocation textLoc = writeDataString(dynamicDataPath, message.getText());
+      FileLocation fileLocation = new FileLocation(0, 0);
+      if (message.getFilePath() != null) {
+        fileLocation = writeDataString(dynamicDataPath, message.getFilePath().toString());
+      }
+
+      long configPos = messageConfigPositions.getOrDefault(message.getId(), -1L);
+      FileLocation configLoc = writeMessageConfig(staticDataPath, message, textLoc, fileLocation, configPos);
+      messageConfigPositions.put(message.getId(), configLoc.begin());
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to save message", ex);
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+  public void updateMessageState(String chatId, String messageId, Message.State state)
+      throws LocalStorageWriteException {
+    throwIfUninitialised();
+    ReadWriteLock lock = getChatLock(chatId);
+    lock.writeLock().lock();
+
+    long configPos = messageConfigPositions.getOrDefault(messageId, -1L);
+    if (configPos == -1) {
+      return;
+    }
+
+    try {
+      Path staticDataPath = getStaticDataPath(chatId);
+      rewriteMessageState(staticDataPath, configPos, state);
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to rewrite message state", ex);
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+
+
+  private List<String> getChatIds(Path chatHolderPath) throws IOException {
+    try (Stream<Path> paths = Files.walk(chatHolderPath, 1)) {
+      return paths
+          .filter(path -> !path.equals(chatHolderPath))
+          .filter(Files::isDirectory)
+          .map(dir -> dir.getFileName().toString())
+          .toList();
+    }
+  }
+
+  private void indexStorage(Path chatHolderPath) throws IOException {
+    List<String> chatIds = getChatIds(chatHolderPath);
+    for (String chatId : chatIds) {
+      Path staticDataPath = getStaticDataPath(chatId);
+      try (FileChannel configChannel = FileChannel.open(staticDataPath, CREATE, READ, WRITE)) {
+        byte[] chatIdBuffer = new byte[MESSAGE_ID_BYTE_LENGTH];
+        for (int i = 0; i < configChannel.size(); i += MESSAGE_CONFIG_LENGTH) {
+          configChannel.read(ByteBuffer.wrap(chatIdBuffer));
+          String readMsgId = new String(chatIdBuffer, StandardCharsets.UTF_8).trim();
+          messageConfigPositions.put(readMsgId, (long) i);
+        }
+      }
+    }
+  }
+
+  private FileLocation writeDataString(Path path, String str) throws IOException {
+    try (FileChannel channel = FileChannel.open(path, CREATE, WRITE, APPEND)) {
+      long beginPos = channel.position();
+      int length = channel.write(ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8)));
+      return new FileLocation(beginPos, length);
+    }
+  }
+
+  private FileLocation writeMessageConfig(Path path, Message message, FileLocation textLoc,
+                                          FileLocation filePathLoc, long position) throws IOException {
+    try (FileChannel channel = FileChannel.open(path, CREATE, WRITE, APPEND)) {
+      long beginPos = position != -1 ? position : channel.position();
+      int length = 0;
+
+      byte[] msgIdBuffer = message.getId().getBytes();
+      byte[] authorBuffer = message.getAuthor().getBytes();
+      byte[] locBuffer = new byte[24];
+      byte[] stateBuffer = new byte[2];
+
+      Bits.unpackLongToBigEndian(textLoc.begin(), locBuffer, 0);
+      Bits.unpackIntToBigEndian(textLoc.length(), locBuffer, 8);
+      Bits.unpackLongToBigEndian(filePathLoc.begin(), locBuffer, 12);
+      Bits.unpackIntToBigEndian(filePathLoc.length(), locBuffer, 20);
+      stateBuffer[0] = (byte) (message.isBelongedToReceiver() ? 1 : 0);
+      stateBuffer[1] = (byte) (message.getState().ordinal());
+
+      if (msgIdBuffer.length != MESSAGE_ID_BYTE_LENGTH) {
+        msgIdBuffer = Arrays.copyOf(msgIdBuffer, MESSAGE_ID_BYTE_LENGTH);
+      }
+      if (authorBuffer.length != AUTHOR_BYTE_LENGTH) {
+        authorBuffer = Arrays.copyOf(authorBuffer, AUTHOR_BYTE_LENGTH);
+      }
+
+      channel.position(beginPos);
+      length += channel.write(ByteBuffer.wrap(msgIdBuffer));
+      length += channel.write(ByteBuffer.wrap(authorBuffer));
+      length += channel.write(ByteBuffer.wrap(locBuffer));
+      length += channel.write(ByteBuffer.wrap(stateBuffer));
+
+      if (length != MESSAGE_CONFIG_LENGTH) {
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(path.toFile(), "rw")) {
+          randomAccessFile.setLength(beginPos);
+        }
+        throw new IOException("Message config has unexpected length");
+      }
+
+      return new FileLocation(beginPos, length);
+    }
+  }
+
+  private void rewriteMessageState(Path path, Long messageConfigPosition,
+                                   Message.State state) throws IOException {
+    try (FileChannel channel = FileChannel.open(path, WRITE, APPEND)) {
+      byte[] stateBuffer = new byte[1];
+      stateBuffer[0] = (byte) (state.ordinal());
+
+      channel.position(messageConfigPosition + MESSAGE_ID_BYTE_LENGTH + AUTHOR_BYTE_LENGTH + 25);
+      int length = channel.write(ByteBuffer.wrap(stateBuffer));
+
+      if (length != Byte.SIZE) {
+        throw new IOException("Failed to rewrite state");
+      }
+    }
+  }
+
+  private String readDataString(FileChannel channel, FileLocation loc) throws IOException {
+    byte[] buffer = new byte[loc.length()];
+    channel.read(ByteBuffer.wrap(buffer), loc.begin());
+    return new String(buffer);
+  }
+
+  private Optional<Message> readMessageById(Path staticDataPath, Path dynamicDataPath, String msgId)
+      throws IOException {
+    try (FileChannel staticDataChannel = FileChannel.open(staticDataPath, CREATE, READ, WRITE);
+         FileChannel dynamicDataChannel = FileChannel.open(dynamicDataPath, CREATE, READ, WRITE)) {
+      long pos = messageConfigPositions.getOrDefault(msgId, -1L);
+      if (pos == -1) {
+        byte[] chatIdBuffer = new byte[MESSAGE_ID_BYTE_LENGTH];
+        for (int i = 0; i < staticDataChannel.size(); i += MESSAGE_CONFIG_LENGTH) {
+          @SuppressWarnings("unused")
+          int readLength = staticDataChannel.read(ByteBuffer.wrap(chatIdBuffer));
+          String readMsgId = new String(chatIdBuffer, StandardCharsets.UTF_8);
+          if (readMsgId.equals(msgId)) {
+            pos = i;
+            break;
+          }
+        }
+      }
+
+      if (pos == -1) {
+        return Optional.empty();
+      }
+
+      return Optional.of(readMessage(staticDataChannel, dynamicDataChannel, pos));
+    }
+  }
+
+  private List<Message> readMessages(Path staticDataPath, Path dynamicDataPath) throws IOException {
+    try (FileChannel staticDataChannel = FileChannel.open(staticDataPath, CREATE, READ, WRITE);
+         FileChannel dynamicDataChannel = FileChannel.open(dynamicDataPath, CREATE, READ, WRITE)) {
+      List<Message> messages = new ArrayList<>();
+
+      for (int i = 0; i < staticDataChannel.size(); i += MESSAGE_CONFIG_LENGTH) {
+        messages.add(readMessage(staticDataChannel, dynamicDataChannel, i));
+      }
+
+      return messages;
+    }
+  }
+
+  private Message readMessage(FileChannel staticDataChannel, FileChannel dynamicDataChannel, long pos)
+      throws IOException {
+    byte[] msgIdBuffer = new byte[MESSAGE_ID_BYTE_LENGTH];
+    byte[] authorBuffer = new byte[AUTHOR_BYTE_LENGTH];
+    byte[] locBuffer = new byte[24];
+    byte[] stateBuffer = new byte[2];
+
+    staticDataChannel.position(pos);
+    staticDataChannel.read(ByteBuffer.wrap(msgIdBuffer));
+    staticDataChannel.read(ByteBuffer.wrap(authorBuffer));
+    staticDataChannel.read(ByteBuffer.wrap(locBuffer));
+    staticDataChannel.read(ByteBuffer.wrap(stateBuffer));
+
+    String msgId = new String(msgIdBuffer, StandardCharsets.UTF_8).trim();
+    String author = new String(authorBuffer, StandardCharsets.UTF_8).trim();
+    long textBegin = Bits.packBigEndianToLong(locBuffer, 0);
+    int textLength = Bits.packBigEndianToInt(locBuffer, 8);
+    long filePathBegin = Bits.packBigEndianToLong(locBuffer, 12);
+    int filePathLength = Bits.packBigEndianToInt(locBuffer, 20);
+    boolean isBelongedToReceiver = stateBuffer[0] == 1;
+    Message.State state = Message.State.values()[stateBuffer[1]];
+
+    String text = readDataString(dynamicDataChannel, new FileLocation(textBegin, textLength));
+    Path filePath = null;
+    if (filePathLength > 0) {
+      filePath = Path.of(readDataString(dynamicDataChannel, new FileLocation(filePathBegin, filePathLength)));
+    }
+
+    return new Message(msgId, text, author, filePath, isBelongedToReceiver, state);
+  }
+
+
+
+  private void createDirectoryIfNotExist(Path path) throws IOException {
+    if (Files.exists(path)) {
+      if (!Files.isDirectory(path)) {
+        throw new IOException("Directory name is occupied by file (path: %s)".formatted(path));
+      }
+    } else {
+      try {
+        Files.createDirectory(path);
+      } catch (IOException e) {
+        throw new IOException("Failed to create directory (path: %s)".formatted(path));
+      }
+    }
+  }
+
+  private Path getAppPath() {
+    return HOME_PATH.resolve(".secretalk");
+  }
+
+  private Path getTmpPath() {
+    return getAppPath().resolve("tmp");
+  }
+
+  private Path getUserFolderPath() {
+    return getAppPath().resolve(username);
+  }
+
+  private Path getChatFolderPath(String chatId) {
+    return getUserFolderPath().resolve(chatId);
+  }
+
+  private Path getChatConfigPath(String chatId) {
+    return getChatFolderPath(chatId).resolve("config.json");
+  }
+
+  private Path getStaticDataPath(String chatId) {
+    return getChatFolderPath(chatId).resolve("data0");
+  }
+
+  private Path getDynamicDataPath(String chatId) {
+    return getChatFolderPath(chatId).resolve("data1");
+  }
+
+  private ReadWriteLock getChatLock(String chatId) {
+    return chatLocks.computeIfAbsent(chatId, _ -> new ReentrantReadWriteLock());
+  }
+
+  private void throwIfUninitialised() {
+    if (username == null) {
+      throw new ModuleUninitialisedStateException("LocalStorage is uninitialised");
+    }
+  }
+
+  private static class FileDeleteVisitor extends SimpleFileVisitor<Path> {
+    @Override
+    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+      Files.delete(file);
+      return FileVisitResult.CONTINUE;
+    }
+
+    @Override
+    public FileVisitResult postVisitDirectory(Path dir, IOException e) throws IOException {
+      if (e == null) {
+        Files.delete(dir);
+        return FileVisitResult.CONTINUE;
+      } else {
+        throw e;
+      }
+    }
+  }
 }

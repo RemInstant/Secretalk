@@ -1,4 +1,4 @@
-package org.reminstant.concurrent;
+package org.reminstant.secretalk.client.exception;
 
 public class ChainTransportIntException extends RuntimeException {
 

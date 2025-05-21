@@ -77,7 +77,7 @@ public class MessageEntry extends HBox {
 
 
 
-  public void startEncrypting() {
+  public void startEncryption() {
     message.setState(Message.State.ENCRYPTING);
     FxUtil.runOnFxThread(() -> {
       showProgressBlock(false);
@@ -85,7 +85,7 @@ public class MessageEntry extends HBox {
     });
   }
 
-  public void startEncrypting(CryptoProgress<?> progress) {
+  public void startEncryption(CryptoProgress<?> progress) {
     Objects.requireNonNull(progress, "progress cannot be null");
     message.setState(Message.State.ENCRYPTING);
     trackCryptoProgress(progress);
@@ -113,7 +113,7 @@ public class MessageEntry extends HBox {
     });
   }
 
-  public void startDecrypting() {
+  public void startDecryption() {
     message.setState(Message.State.TRANSMITTING);
     FxUtil.runOnFxThread(() -> {
       showProgressBlock(false);
@@ -121,7 +121,7 @@ public class MessageEntry extends HBox {
     });
   }
 
-  public void startDecrypting(CryptoProgress<?> progress) {
+  public void startDecryption(CryptoProgress<?> progress) {
     Objects.requireNonNull(progress, "progress cannot be null");
     message.setState(Message.State.TRANSMITTING);
     FxUtil.runOnFxThread(() -> {

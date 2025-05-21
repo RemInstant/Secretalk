@@ -1,5 +1,7 @@
 package org.reminstant.secretalk.client.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -78,26 +80,36 @@ public class Chat {
     this.key = key;
   }
 
-  public String getTitle() {
-    return configuration.title;
+  Chat() {
+    this(null, null, null, null, null);
   }
 
+  @JsonIgnore
+  public String getTitle() {
+    return configuration.title.isEmpty() ? otherUsername : configuration.title;
+  }
+
+  @JsonIgnore
   public String getCryptoSystemName() {
     return configuration.cryptoSystemName;
   }
 
+  @JsonIgnore
   public String getCipherMode() {
     return configuration.cipherMode;
   }
 
+  @JsonIgnore
   public String getPaddingMode() {
     return configuration.paddingMode;
   }
 
+  @JsonIgnore
   public byte[] getInitVector() {
     return configuration.initVector;
   }
 
+  @JsonIgnore
   public byte[] getRandomDelta() {
     return configuration.randomDelta;
   }

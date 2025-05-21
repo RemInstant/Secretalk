@@ -1,6 +1,6 @@
 spring:
   application:
-    name: cryptoMessengerServer
+    name: SecretalkServer
   profiles:
     include:
       - jwt
@@ -22,7 +22,8 @@ logging:
     root: info
     org:
       reminstant:
-        cryptomessengerserver: debug
+        secretalk:
+          server: debug
 
 nats:
   server:

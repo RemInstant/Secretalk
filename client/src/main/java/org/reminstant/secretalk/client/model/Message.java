@@ -5,6 +5,8 @@ import lombok.Setter;
 import lombok.ToString;
 
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Objects;
 
 @Getter
 @ToString
@@ -29,20 +31,19 @@ public class Message {
   private State state;
 
   public Message(String id, String text, String author, boolean belongedToReceiver) {
-    this.id = id;
-    this.text = text;
-    this.author = author;
-    this.filePath = null;
-    this.belongedToReceiver = belongedToReceiver;
-    this.state = State.NEW;
+    this(id, text, author, null, belongedToReceiver, State.NEW);
   }
 
-  public Message(String id, String text, String author, Path filepath, boolean belongedToReceiver) {
+  public Message(String id, String text, String author, Path filePath, boolean belongedToReceiver) {
+    this(id, text, author, filePath, belongedToReceiver, State.NEW);
+  }
+
+  public Message(String id, String text, String author, Path filePath, boolean belongedToReceiver, State state) {
     this.id = id;
     this.text = text;
     this.author = author;
-    this.filePath = filepath;
+    this.filePath = filePath;
     this.belongedToReceiver = belongedToReceiver;
-    this.state = State.NEW;
+    this.state = state;
   }
 }

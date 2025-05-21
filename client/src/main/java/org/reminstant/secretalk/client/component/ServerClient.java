@@ -250,9 +250,10 @@ public class ServerClient {
     } catch (InterruptedException ex) {
       log.debug("{} {} - cancelled", request.method(), request.uri());
       Thread.currentThread().interrupt();
+      return null;
     }
 
-    if (response == null || response.body() == null || response.body().isEmpty()) {
+    if (response.body() == null || response.body().isEmpty()) {
       throw new InvalidServerAnswer(request.uri(), "no body");
     }
 

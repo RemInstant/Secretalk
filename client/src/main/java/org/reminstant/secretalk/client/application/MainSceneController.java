@@ -9,6 +9,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import net.rgielen.fxweaver.core.FxmlView;
+import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.secretalk.client.application.control.ExpandableTextArea;
 import org.reminstant.secretalk.client.application.control.NotificationLabel;
 import org.reminstant.secretalk.client.model.Chat;
@@ -39,14 +40,16 @@ public class MainSceneController implements Initializable {
 
   @FXML private ScrollPane chatHolderScroll;
   @FXML private VBox chatHolder;
-  @FXML private ExpandableTextArea messageInput;
-
 
   @FXML private VBox rightBlock;
   @FXML private Label chatTitle;
   @FXML private StackPane chatStateBlockHolder;
+  @FXML private Button chatConnectionAcceptButton;
+  @FXML private Button chatConnectionRequestButton;
+  @FXML private Button chatConnectionBreakButton;
 
   @FXML private ScrollPane messageHolderWrapper;
+  @FXML private ExpandableTextArea messageInput;
 
   @FXML private HBox attachedFileBlock;
   @FXML private Label attachedFileLabel;
@@ -89,8 +92,8 @@ public class MainSceneController implements Initializable {
   @Override
   public void initialize(URL url, ResourceBundle resourceBundle) {
     chatHolder.prefWidthProperty().bind(chatHolderScroll.widthProperty().subtract(4));
-    chatCreatingUsernameField.textProperty().addListener(_ ->
-        chatCreatingTitleField.setText(chatCreatingUsernameField.getText()));
+//    chatCreatingUsernameField.textProperty().addListener(_ ->
+//        chatCreatingTitleField.setText(chatCreatingUsernameField.getText()));
 
     settingsButton.setOnMouseClicked(this::onSettingsButtonClicked);
     addChatButton.setOnMouseClicked(this::onAddChatButtonClicked);
@@ -99,6 +102,10 @@ public class MainSceneController implements Initializable {
     attachFileButton.setOnMouseClicked(this::onAttachFileButtonClicked);
 
     attachedFileCancelLabel.setOnMouseClicked(this::onDetachFileButtonClicked);
+
+    chatConnectionAcceptButton.setOnMouseClicked(this::onConnectionAcceptButtonClicked);
+    chatConnectionRequestButton.setOnMouseClicked(this::onConnectionRequestButtonClicked);
+    chatConnectionBreakButton.setOnMouseClicked(this::onConnectionBreakButtonClicked);
 
     shadow.setOnMouseClicked(this::onShadowClicked);
     chatCreatingButton.setOnMouseClicked(this::onChatCreatingButtonClicked);
@@ -133,6 +140,7 @@ public class MainSceneController implements Initializable {
     shadow.setVisible(false);
     chatCreationBlock.setVisible(false);
     chatCreatingUsernameField.setText("");
+    chatCreatingTitleField.setText("");
     chatCreationNotificationLabel.collapse();
   }
 
@@ -164,7 +172,7 @@ public class MainSceneController implements Initializable {
 
 
   private void processChatDeserting() {
-    stateManager.processChatDeserting()
+    stateManager.processActiveChatDesertion()
         .thenWeaklyConsumeAsync(status -> {
           if (status == 200) {
             FxUtil.runOnFxThread(this::closeChatDeletionBlock);
@@ -177,7 +185,7 @@ public class MainSceneController implements Initializable {
   }
 
   private void processChatDestroying() {
-    stateManager.processChatDestroying()
+    stateManager.processActiveChatDestruction()
         .thenWeaklyConsumeAsync(status -> {
           if (status == 200) {
             FxUtil.runOnFxThread(this::closeChatDeletionBlock);
@@ -206,6 +214,33 @@ public class MainSceneController implements Initializable {
               String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
               chatCreationNotificationLabel.showError(desc);
             });
+          }
+        });
+  }
+
+  private void processActiveChatAcceptance() {
+    stateManager.processActiveChatAcceptance()
+        .thenWeaklyConsumeAsync(status -> {
+          if (status != 200) {
+            log.error("Failed to accept chat");
+          }
+        });
+  }
+
+  private void processActiveChatRequest() {
+    stateManager.processActiveChatRequest()
+        .thenWeaklyConsumeAsync(status -> {
+          if (status != 200) {
+            log.error("Failed to accept chat");
+          }
+        });
+  }
+
+  private void processActiveChatDisconnection() {
+    stateManager.processActiveChatDisconnection()
+        .thenWeaklyConsumeAsync(status -> {
+          if (status != 200) {
+            log.error("Failed to accept chat");
           }
         });
   }
@@ -307,6 +342,24 @@ public class MainSceneController implements Initializable {
   private void onDetachFileButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       detachFile();
+    }
+  }
+
+  private void onConnectionAcceptButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      processActiveChatAcceptance();
+    }
+  }
+
+  private void onConnectionRequestButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      processActiveChatRequest();
+    }
+  }
+
+  private void onConnectionBreakButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      processActiveChatDisconnection();
     }
   }
 

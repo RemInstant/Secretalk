@@ -37,17 +37,23 @@
                 <HBox fx:id="awaitingStateBlock" styleClass="stateBlock">
                     <Label>Запрос на соединение</Label>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Button focusTraversable="false">подтвердить соединение</Button>
+                    <Button fx:id="chatConnectionAcceptButton" focusTraversable="false">
+                        подтвердить соединение
+                    </Button>
                 </HBox>
                 <HBox fx:id="connectedStateBlock" styleClass="stateBlock">
                     <Label>Соединение установлено</Label>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Button focusTraversable="false">разорвать соединение</Button>
+                    <Button fx:id="chatConnectionBreakButton" focusTraversable="false">
+                        разорвать соединение
+                    </Button>
                 </HBox>
                 <HBox fx:id="disconnectedStateBlock" styleClass="stateBlock">
                     <Label>Отсутствие соединения</Label>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Button focusTraversable="false">запросить соединение</Button>
+                    <Button fx:id="chatConnectionRequestButton" focusTraversable="false">
+                        запросить соединение
+                    </Button>
                 </HBox>
                 <HBox fx:id="desertedStateBlock" styleClass="stateBlock">
                     <Label>Собеседник покинул чат</Label>
@@ -71,7 +77,7 @@
                                     focusTraversable="false"
                                     AnchorPane.leftAnchor="50" AnchorPane.rightAnchor="50"
                                     AnchorPane.topAnchor="4" AnchorPane.bottomAnchor="8"
-                                    promptText="Message..."/>
+                                    promptText="Сообщение..."/>
                 <ImageView fx:id="sendButton" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">
                     <Image url="@../icons/filled/sendIcon32x32.png"/>
                 </ImageView>
@@ -83,11 +89,11 @@
         <Label styleClass="blockTitle">Создание чата</Label>
         <Label styleClass="inputLabel">Собеседник</Label>
         <VBox styleClass="inputHolder">
-            <TextField fx:id="chatCreatingUsernameField" focusTraversable="false" styleClass="input"/>
+            <TextField fx:id="chatCreatingUsernameField" styleClass="input"/>
         </VBox>
         <Label styleClass="inputLabel">Название чата</Label>
         <VBox styleClass="inputHolder">
-            <TextField fx:id="chatCreatingTitleField" focusTraversable="false" styleClass="input"/>
+            <TextField fx:id="chatCreatingTitleField" styleClass="input" promptText="Автогенерация"/>
         </VBox>
         <Label styleClass="inputLabel">Алгоритм шифрования</Label>
         <VBox styleClass="inputHolder">
