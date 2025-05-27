@@ -1,6 +1,7 @@
 package org.reminstant.secretalk.client.application;
 
 import javafx.application.Application;
+import javafx.application.HostServices;
 import javafx.application.Platform;
 import javafx.stage.Stage;
 import org.reminstant.secretalk.client.SpringBootWrapperApplication;
@@ -8,7 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
+@Configuration
 public class ClientApplication extends Application {
 
   private static final Logger log = LoggerFactory.getLogger(ClientApplication.class);
@@ -22,6 +26,8 @@ public class ClientApplication extends Application {
 
     this.applicationContext = new SpringApplicationBuilder()
         .sources(SpringBootWrapperApplication.class)
+//        .initializers((ConfigurableApplicationContext context) ->
+//            context.getBeanFactory().registerSingleton("hostServices", getHostServices()))
         .run(args);
   }
 
@@ -36,5 +42,10 @@ public class ClientApplication extends Application {
   public void stop() {
     this.applicationContext.close();
     Platform.exit();
+  }
+
+  @Bean
+  HostServices hostServices() {
+    return getHostServices();
   }
 }

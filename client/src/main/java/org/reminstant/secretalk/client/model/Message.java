@@ -15,7 +15,9 @@ public class Message {
   public enum State {
     NEW,
     ENCRYPTING,
-    TRANSMITTING,
+    UPLOADING,
+    REQUESTING,
+    DOWNLOADING,
     DECRYPTING,
     FAILED,
     CANCELLED,
@@ -25,25 +27,30 @@ public class Message {
   private final String id;
   private final String text;
   private final String author;
-  private final Path filePath;
+  private final String fileName;
   private final boolean belongedToReceiver;
+  @Setter
+  private Path filePath;
   @Setter
   private State state;
 
-  public Message(String id, String text, String author, boolean belongedToReceiver) {
-    this(id, text, author, null, belongedToReceiver, State.NEW);
+  public Message(String id, String text, String author, String fileName, boolean belongedToReceiver) {
+    this(id, text, author, fileName, belongedToReceiver, null, State.NEW);
   }
 
-  public Message(String id, String text, String author, Path filePath, boolean belongedToReceiver) {
-    this(id, text, author, filePath, belongedToReceiver, State.NEW);
+  public Message(String id, String text, String author, String fileName,
+                 boolean belongedToReceiver, Path filePath) {
+    this(id, text, author, fileName, belongedToReceiver, filePath, State.NEW);
   }
 
-  public Message(String id, String text, String author, Path filePath, boolean belongedToReceiver, State state) {
+  public Message(String id, String text, String author, String fileName,
+                 boolean belongedToReceiver, Path filePath, State state) {
     this.id = id;
     this.text = text;
     this.author = author;
-    this.filePath = filePath;
+    this.fileName = fileName;
     this.belongedToReceiver = belongedToReceiver;
+    this.filePath = filePath;
     this.state = state;
   }
 }

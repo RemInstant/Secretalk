@@ -144,7 +144,7 @@ public final class Bits {
   // --- UNPACKING int/long -> byte[] ---
 
   public static byte[] unpackLong(long value, int byteCount) {
-    if (Long.numberOfTrailingZeros(Long.highestOneBit(value)) + 1 > 8 * byteCount) {
+    if (value != 0 && Long.numberOfTrailingZeros(Long.highestOneBit(value)) + 1 > 8 * byteCount) {
       throw new IllegalArgumentException(
           String.format("Number %d cannot be presented as %d bytes", value, byteCount));
     } else {

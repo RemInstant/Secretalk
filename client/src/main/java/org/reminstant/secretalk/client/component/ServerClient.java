@@ -228,9 +228,24 @@ public class ServerClient {
         "fileData", fileData);
     String json = objectMapper.writeValueAsString(data);
 
-    log.info("sent filePart {}", fileData);
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/send-file-part"))
+        .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
+        .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
+        .POST(HttpRequest.BodyPublishers.ofString(json))
+        .build(), data, UserEventWrapperResponse.class);
+  }
+
+  public NoPayloadResponse requestMessageFile(String messageId, String chatId, String otherUsername)
+      throws IOException, InvalidServerAnswer {
+    Map<String, Object> data = Map.of(
+        "messageId", messageId,
+        "chatId", chatId,
+        "otherUsername", otherUsername);
+    String json = objectMapper.writeValueAsString(data);
+
+    return sendRequest(HttpRequest.newBuilder()
+        .uri(URI.create("http://localhost:8080/api/chat/request-message-file"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
@@ -245,8 +260,14 @@ public class ServerClient {
     try {
       log.debug("send {} {} | body: {}", request.method(), request.uri(), data);
       response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+      String bodyString = null;
+      if (response.body() != null) {
+        bodyString = response.body();
+        bodyString = bodyString.substring(0, Math.min(512, bodyString.length())); //TODO: move constant to config
+      }
       log.debug("get {} {} - code {} | body: {}", request.method(), request.uri(),
-          response.statusCode(), response.body());
+          response.statusCode(), bodyString);
     } catch (InterruptedException ex) {
       log.debug("{} {} - cancelled", request.method(), request.uri());
       Thread.currentThread().interrupt();

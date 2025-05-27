@@ -1,5 +1,7 @@
-package org.reminstant.cryptography.context;
+package org.reminstant.secretalk.client.model;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.Progress;
 
@@ -8,11 +10,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class CryptoProgress<T> implements Progress<T> {
+public class HttpSendingProgress implements Progress<Integer> {
 
-  private final CryptoProgress.Counter<T> counter;
+  private final HttpSendingProgress.Counter counter;
 
-  CryptoProgress(CryptoProgress.Counter<T> counter) {
+  public HttpSendingProgress(HttpSendingProgress.Counter counter) {
     this.counter = counter;
   }
 
@@ -37,12 +39,12 @@ public class CryptoProgress<T> implements Progress<T> {
   }
 
   @Override
-  public T getResult() throws ExecutionException, InterruptedException {
+  public Integer getResult() throws ExecutionException, InterruptedException {
     return counter.getFuture().get();
   }
 
   @Override
-  public T getResult(long timeout, TimeUnit unit)
+  public Integer getResult(long timeout, TimeUnit unit)
       throws ExecutionException, InterruptedException, TimeoutException {
     return counter.getFuture().get(timeout, unit);
   }
@@ -52,17 +54,14 @@ public class CryptoProgress<T> implements Progress<T> {
     return counter.getProgress();
   }
 
-  public ChainableFuture<T> getFuture() {
-    return counter.getFuture();
-  }
-
-
-  public static class Counter<R> implements Progress.Counter {
+  public static class Counter implements Progress.Counter {
 
     private final AtomicLong completedSubTaskCount;
     private final AtomicLong subTaskCount;
 
-    private ChainableFuture<R> future;
+    @Getter
+    @Setter
+    private ChainableFuture<Integer> future;
 
     public Counter() {
       this.completedSubTaskCount = new AtomicLong(0);
@@ -90,14 +89,6 @@ public class CryptoProgress<T> implements Progress<T> {
     @Override
     public void incrementProgress() {
       completedSubTaskCount.incrementAndGet();
-    }
-    
-    public ChainableFuture<R> getFuture() {
-      return future;
-    }
-
-    public void setFuture(ChainableFuture<R> future) {
-      this.future = future;
     }
   }
 }

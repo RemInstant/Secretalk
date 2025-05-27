@@ -1,6 +1,8 @@
 package org.reminstant.secretalk.server.service;
 
-import org.reminstant.secretalk.server.exception.InvalidCredentials;
+import org.reminstant.secretalk.server.exception.ConstraintViolationException;
+import org.reminstant.secretalk.server.exception.InvalidPasswordException;
+import org.reminstant.secretalk.server.exception.InvalidUsernameException;
 import org.reminstant.secretalk.server.exception.OccupiedUsername;
 import org.reminstant.secretalk.server.model.AppUser;
 import org.reminstant.secretalk.server.repository.AppUserRepository;
@@ -12,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -39,23 +42,16 @@ public class AppUserService implements UserDetailsService {
   }
 
   @Transactional
-  public void registerUser(String username, String password) throws InvalidCredentials, OccupiedUsername {
-    if (username == null || password == null || username.isEmpty() || password.isEmpty()) {
-      throw new InvalidCredentials("Empty credentials");
-    }
+  public void registerUser(String username, String password) throws ConstraintViolationException {
+    Objects.requireNonNull(username, "username cannot be null");
+    Objects.requireNonNull(password, "username cannot be null");
 
-    if (username.length() < 4 || password.length() < 6) {
-      throw new InvalidCredentials("Too short credentials");
+    if (username.length() < 4 || username.length() > 16 || !username.matches("\\w+")) {
+      throw new InvalidUsernameException();
     }
-
-    if (username.length() > 20 || password.length() > 32) {
-      throw new InvalidCredentials("Too long credentials");
+    if (password.length() < 6) {
+      throw new InvalidPasswordException();
     }
-
-    if (!username.matches("\\w+")) {
-      throw new InvalidCredentials("Username does not matches [0-9A-z_]");
-    }
-
     if (appUserRepository.existsAppUserByUsername(username)) {
       throw new OccupiedUsername();
     }

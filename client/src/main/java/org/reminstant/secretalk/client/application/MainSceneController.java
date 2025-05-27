@@ -73,7 +73,6 @@ public class MainSceneController implements Initializable {
   @FXML private Button chatDeletionButton;
   @FXML private Button chatDeletionCancelButton;
 
-  //
   private final FileChooser messageFileChooser;
   private File attachedFile;
 

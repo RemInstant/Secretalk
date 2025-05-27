@@ -4,6 +4,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.reminstant.secretalk.server.dto.http.*;
 import org.reminstant.secretalk.server.dto.nats.UserEvent;
+import org.reminstant.secretalk.server.exception.LocalFileStorageException;
+import org.reminstant.secretalk.server.repository.LocalFileStorage;
 import org.reminstant.secretalk.server.service.NatsBrokerService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -11,22 +13,27 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.Arrays;
 import java.util.Map;
 
 @Slf4j
 @RestController
 public class EventController {
 
-  private final NatsBrokerService nats;
+  private static final int FILE_BLOCK_BYTE_SIZE = 128 * (1 << 10);
 
-  EventController(NatsBrokerService natsBrokerService) {
+  private final NatsBrokerService nats;
+  private final LocalFileStorage fileStorage;
+
+  EventController(NatsBrokerService natsBrokerService, LocalFileStorage fileStorage) {
     this.nats = natsBrokerService;
+    this.fileStorage = fileStorage;
   }
 
   @GetMapping("${api.get-dh-params}")
   ResponseEntity<Map<String,String>> getDHParams(HttpServletRequest request, Principal principal) {
     logDebugHttpRequest(request, principal, null);
-    // RFC 3526 4096-bit group
+    // RFC 3526 4096-bit group TODO: put into file
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .body(Map.of(
@@ -218,6 +225,7 @@ public class EventController {
                                        @RequestBody ChatMessageData data,
                                        Principal principal) {
     logDebugHttpRequest(request, principal, data);
+
     try {
       nats.sendChatMessage(data.messageId(), data.chatId(), principal.getName(),
           data.otherUsername(), data.messageData(), data.attachedFileName());
@@ -239,15 +247,76 @@ public class EventController {
                                     @RequestBody ChatFileData data,
                                     Principal principal) {
     logDebugHttpRequest(request, principal, data);
+
+    String fileName = data.chatId() + data.messageId();
     try {
-      nats.sendFilePart(data.messageId(), data.chatId(), principal.getName(),
-          data.otherUsername(), data.partCount(), data.partNumber(), data.fileData());
-    } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      long pos = data.partNumber() * FILE_BLOCK_BYTE_SIZE;
+      fileStorage.writeFilePart(fileName, pos, data.fileData());
+    } catch (LocalFileStorageException ex) {
+      log.error("File storage exception", ex);
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
           .build();
+    }
+
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .build();
+  }
+
+  @PostMapping("${api.request-message-file}")
+  ResponseEntity<Void> requestMessageFile(HttpServletRequest request,
+                                          @RequestBody MessageFileRequestData data,
+                                          Principal principal) {
+    logDebugHttpRequest(request, principal, data);
+
+    ResponseEntity<Void> response500 = ResponseEntity
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .contentType(MediaType.APPLICATION_JSON)
+        .build();
+
+    String fileName = data.chatId() + data.messageId();
+    try {
+      if (!fileStorage.isFileExist(fileName)) {
+        return ResponseEntity
+            .status(HttpStatus.BAD_REQUEST) //TODO: custom status
+            .contentType(MediaType.APPLICATION_JSON)
+            .build();
+      }
+
+      long fileSize = fileStorage.getFileSize(fileName);
+      long partCnt = fileSize / FILE_BLOCK_BYTE_SIZE;
+      if (fileSize % FILE_BLOCK_BYTE_SIZE != 0) {
+        partCnt++;
+      }
+
+      byte[] readBlock = new byte[FILE_BLOCK_BYTE_SIZE];
+      for (long i = 0; i < partCnt; ++i) {
+        long pos = i * FILE_BLOCK_BYTE_SIZE;
+        int read = fileStorage.readFilePart(fileName, pos, readBlock);
+
+        byte[] block;
+        if (read == FILE_BLOCK_BYTE_SIZE) {
+          block = readBlock;
+        } else {
+          block = Arrays.copyOf(readBlock, read);
+        }
+        nats.sendFilePart(data.messageId(), data.chatId(), data.otherUsername(),
+            principal.getName(), partCnt, i, block);
+      }
+    } catch (LocalFileStorageException ex) {
+      log.error("File storage exception", ex);
+      return response500;
+    } catch (Exception ex) {
+      log.error("Failed to send NATS event", ex);
+      return response500;
+    }
+
+    try {
+      fileStorage.deleteFile(fileName);
+    } catch (LocalFileStorageException ex) {
+      log.warn("Failed to delete processed file", ex);
     }
 
     return ResponseEntity.ok()
@@ -260,6 +329,11 @@ public class EventController {
   private void logDebugHttpRequest(HttpServletRequest request, Principal principal, Object body) {
     String username = principal != null ? principal.getName() : "anonymous";
     String method = "%4s".formatted(request.getMethod());
-    log.debug("User {}: {} {} | body: {}", username, method, request.getRequestURL(), body);
+    String bodyString = null;
+    if (body != null) {
+      bodyString = body.toString();
+      bodyString = bodyString.substring(0, Math.min(512, bodyString.length()));
+    }
+    log.debug("User {}: {} {} | body: {}", username, method, request.getRequestURL(), bodyString);
   }
 }

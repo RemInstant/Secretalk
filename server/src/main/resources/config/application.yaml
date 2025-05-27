@@ -10,7 +10,7 @@ spring:
     password: admin
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
 #  kafka:
 #    bootstrap-servers: kafka:9092
 
@@ -46,4 +46,5 @@ api:
   destroy-chat: /api/chat/destroy-chat
   send-chat-message: /api/chat/send-chat-message
   send-file-part: /api/chat/send-file-part
+  request-message-file: /api/chat/request-message-file
 

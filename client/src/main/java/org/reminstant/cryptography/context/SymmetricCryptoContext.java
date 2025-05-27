@@ -1,6 +1,7 @@
 package org.reminstant.cryptography.context;
 
 import org.reminstant.concurrent.ChainableFuture;
+import org.reminstant.concurrent.Progress;
 import org.reminstant.cryptography.Bits;
 import org.reminstant.cryptography.SymmetricCryptoSystem;
 import org.reminstant.cryptography.symmetric.DEAL;
@@ -135,64 +136,64 @@ public final class SymmetricCryptoContext {
 
   // TODO: perhaps public methods need javadoc
   public CryptoProgress<byte[]> encryptAsync(byte[] message) {
-    CryptoProgress<byte[]> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture.supplyWeaklyAsync(() -> encryptInternal(message, progress)));
-    return progress;
+    CryptoProgress.Counter<byte[]> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture.supplyWeaklyAsync(() -> encryptInternal(message, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<byte[]> encryptAsync(String inputFilename) {
-    CryptoProgress<byte[]> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture.supplyWeaklyAsync(() -> encryptInternal(inputFilename, progress)));
-    return progress;
+    CryptoProgress.Counter<byte[]> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture.supplyWeaklyAsync(() -> encryptInternal(inputFilename, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<Void> encryptAsync(byte[] message, String outputFilename) {
-    CryptoProgress<Void> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture
-        .runWeaklyAsync(() -> encryptInternal(message, outputFilename, progress)));
-    return progress;
+    CryptoProgress.Counter<Void> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture
+        .runWeaklyAsync(() -> encryptInternal(message, outputFilename, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<Void> encryptAsync(String inputFilename, String outputFilename) {
-    CryptoProgress<Void> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture
-        .runWeaklyAsync(() -> encryptInternal(inputFilename, outputFilename, progress)));
-    return progress;
+    CryptoProgress.Counter<Void> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture
+        .runWeaklyAsync(() -> encryptInternal(inputFilename, outputFilename, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<byte[]> decryptAsync(byte[] cipher) {
-    CryptoProgress<byte[]> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture
-        .supplyWeaklyAsync(() -> decryptInternal(cipher, progress)));
-    return progress;
+    CryptoProgress.Counter<byte[]> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture
+        .supplyWeaklyAsync(() -> decryptInternal(cipher, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<byte[]> decryptAsync(String inputFilename) {
-    CryptoProgress<byte[]> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture
-        .supplyWeaklyAsync(() -> decryptInternal(inputFilename, progress)));
-    return progress;
+    CryptoProgress.Counter<byte[]> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture
+        .supplyWeaklyAsync(() -> decryptInternal(inputFilename, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<Void> decryptAsync(byte[] message, String outputFilename) {
-    CryptoProgress<Void> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture
-        .runWeaklyAsync(() -> decryptInternal(message, outputFilename, progress)));
-    return progress;
+    CryptoProgress.Counter<Void> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture
+        .runWeaklyAsync(() -> decryptInternal(message, outputFilename, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   public CryptoProgress<Void> decryptAsync(String inputFilename, String outputFilename) {
-    CryptoProgress<Void> progress = new CryptoProgress<>();
-    progress.setFuture(ChainableFuture
-        .runWeaklyAsync(() -> decryptInternal(inputFilename, outputFilename, progress)));
-    return progress;
+    CryptoProgress.Counter<Void> counter = new CryptoProgress.Counter<>();
+    counter.setFuture(ChainableFuture
+        .runWeaklyAsync(() -> decryptInternal(inputFilename, outputFilename, counter)));
+    return new CryptoProgress<>(counter);
   }
 
   // endregion
 
   // region --- internal encryption/decryption ---
 
-  private byte[] encryptInternal(byte[] message, CryptoProgress<byte[]> progress) {
+  private byte[] encryptInternal(byte[] message, Progress.Counter progress) {
     int blockCnt = (int) getCipherBlockCount(message.length);
     List<byte[]> blockList = Arrays.asList(new byte[blockCnt][]);
     setupProgressIfPresent(progress, blockCnt);
@@ -201,7 +202,7 @@ public final class SymmetricCryptoContext {
     return convertBlockListToArray(blockList);
   }
 
-  private byte[] encryptInternal(String inputFilename, CryptoProgress<byte[]> progress) throws IOException {
+  private byte[] encryptInternal(String inputFilename, Progress.Counter progress) throws IOException {
     try (FileChannel input = FileChannel.open(Path.of(inputFilename), READ)) {
       throwIfTooLargeFile(input.size());
 
@@ -217,7 +218,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void encryptInternal(byte[] message, String outputFilename,
-                              CryptoProgress<Void> progress) throws IOException {
+                              Progress.Counter progress) throws IOException {
     try (FileChannel output = FileChannel.open(Path.of(outputFilename), CREATE, WRITE)) {
       long blockCnt = getCipherBlockCount(message.length);
       setupProgressIfPresent(progress, blockCnt);
@@ -228,7 +229,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void encryptInternal(String inputFilename, String outputFilename,
-                              CryptoProgress<Void> progress) throws IOException {
+                              Progress.Counter progress) throws IOException {
     try (FileChannel input = FileChannel.open(Path.of(inputFilename), READ);
          FileChannel output = FileChannel.open(Path.of(outputFilename), CREATE, WRITE)) {
       long blockCnt = getCipherBlockCount(input.size());
@@ -239,7 +240,7 @@ public final class SymmetricCryptoContext {
     }
   }
 
-  private byte[] decryptInternal(byte[] cipher, CryptoProgress<byte[]> progress) {
+  private byte[] decryptInternal(byte[] cipher, Progress.Counter progress) {
     int blockCnt = (int) getMessageBlockCount(cipher.length);
     List<byte[]> blockList = Arrays.asList(new byte[blockCnt][]);
     setupProgressIfPresent(progress, blockCnt);
@@ -248,7 +249,7 @@ public final class SymmetricCryptoContext {
     return convertBlockListToArray(blockList);
   }
 
-  private byte[] decryptInternal(String inputFilename, CryptoProgress<byte[]> progress) throws IOException {
+  private byte[] decryptInternal(String inputFilename, Progress.Counter progress) throws IOException {
     try (FileChannel input = FileChannel.open(Path.of(inputFilename), READ)) {
       throwIfTooLargeFile(input.size());
 
@@ -264,7 +265,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptInternal(byte[] cipher, String outputFilename,
-                              CryptoProgress<Void> progress) throws IOException {
+                              Progress.Counter progress) throws IOException {
     try (FileChannel output = FileChannel.open(Path.of(outputFilename), CREATE, WRITE)) {
       long blockCnt = getMessageBlockCount(cipher.length);
       setupProgressIfPresent(progress, blockCnt);
@@ -275,7 +276,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptInternal(String inputFilename, String outputFilename,
-                              CryptoProgress<Void> progress) throws IOException {
+                              Progress.Counter progress) throws IOException {
     try (FileChannel input = FileChannel.open(Path.of(inputFilename), READ);
          FileChannel output = FileChannel.open(Path.of(outputFilename), CREATE, WRITE)) {
       long blockCnt = getMessageBlockCount(input.size());
@@ -291,7 +292,7 @@ public final class SymmetricCryptoContext {
   // region --- Modes of encryption/decryption methods ---
 
   private void encrypt(DataReader msgReader, DataWriter cipherWriter,
-                       long blockCount, CryptoProgress<?> progress) {
+                       long blockCount, Progress.Counter progress) {
     BigInteger delta = (BigInteger) extraConfig.getOrDefault(RD_PARAM, null);
     switch (encryptionMode) {
       case ECB -> encryptByECB(msgReader, cipherWriter, blockCount, progress);
@@ -305,7 +306,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decrypt(DataReader cipherReader, DataWriter msgWriter,
-                       long blockCount, CryptoProgress<?> progress) {
+                       long blockCount, Progress.Counter progress) {
     BigInteger delta = (BigInteger) extraConfig.getOrDefault(RD_PARAM, null);
     switch (encryptionMode) {
       case ECB -> decryptByECB(cipherReader, msgWriter, blockCount, progress);
@@ -321,7 +322,7 @@ public final class SymmetricCryptoContext {
 
 
   private void encryptByECB(DataReader msgReader, DataWriter cipherWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     operateParallel(i -> {
       cipherWriter.writeBlock(i, cryptoSystem.encrypt(msgReader.readBlock(i)));
       incrementProgressIfPresent(progress);
@@ -329,7 +330,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptByECB(DataReader cipherReader, DataWriter msgWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     operateParallel(i -> {
       msgWriter.writeBlock(i, cryptoSystem.decrypt(cipherReader.readBlock(i)));
       incrementProgressIfPresent(progress);
@@ -337,7 +338,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void encryptByCBC(DataReader msgReader, DataWriter cipherWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     byte[] prevCipher = initVector;
     for (long i = 0; i < blockCount; ++i) {
       byte[] msg = msgReader.readBlock(i);
@@ -349,7 +350,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptByCBC(DataReader cipherReader, DataWriter msgWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     operateParallel(i -> {
       byte[] prevCipher = i > 0 ? cipherReader.readBlock(i - 1) : initVector;
       byte[] cipher = cipherReader.readBlock(i);
@@ -360,7 +361,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void encryptByPCBC(DataReader msgReader, DataWriter cipherWriter,
-                             long blockCount, CryptoProgress<?> progress) {
+                             long blockCount, Progress.Counter progress) {
     byte[] prevCipher = initVector;
     byte[] prevMsg = new byte[blockByteSize];
     for (long i = 0; i < blockCount; ++i) {
@@ -374,7 +375,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptByPCBC(DataReader cipherReader, DataWriter msgWriter,
-                             long blockCount, CryptoProgress<?> progress) {
+                             long blockCount, Progress.Counter progress) {
     byte[] prevCipher = initVector;
     byte[] prevMsg = new byte[blockByteSize];
     for (long i = 0; i < blockCount; ++i) {
@@ -388,7 +389,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void encryptByCFB(DataReader msgReader, DataWriter cipherWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     byte[] prevCipher = initVector;
     for (long i = 0; i < blockCount; ++i) {
       byte[] msg = msgReader.readBlock(i);
@@ -400,7 +401,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptByCFB(DataReader cipherReader, DataWriter msgWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     operateParallel(i -> {
       byte[] prevCipher = i > 0 ? cipherReader.readBlock(i - 1) : initVector;
       byte[] cipher = cipherReader.readBlock(i);
@@ -411,7 +412,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void encryptByOFB(DataReader msgReader, DataWriter cipherWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     byte[] tmp = initVector;
     for (long i = 0; i < blockCount; ++i) {
       tmp = cryptoSystem.encrypt(tmp);
@@ -423,22 +424,22 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptByOFB(DataReader cipherReader, DataWriter msgWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     encryptByOFB(cipherReader, msgWriter, blockCount, progress);
   }
 
   private void encryptByCTR(DataReader msgReader, DataWriter cipherWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     encryptByRandomDelta(msgReader, cipherWriter, blockCount, progress, BigInteger.ONE);
   }
 
   private void decryptByCTR(DataReader cipherReader, DataWriter msgWriter,
-                            long blockCount, CryptoProgress<?> progress) {
+                            long blockCount, Progress.Counter progress) {
     decryptByRandomDelta(cipherReader, msgWriter, blockCount, progress, BigInteger.ONE);
   }
 
   private void encryptByRandomDelta(DataReader msgReader, DataWriter cipherWriter,
-                                    long blockCount, CryptoProgress<?> progress, BigInteger delta) {
+                                    long blockCount, Progress.Counter progress, BigInteger delta) {
     BigInteger counter = new BigInteger(1, initVector);
     operateParallel(i -> {
       byte[] msg = msgReader.readBlock(i);
@@ -463,7 +464,7 @@ public final class SymmetricCryptoContext {
   }
 
   private void decryptByRandomDelta(DataReader cipherReader, DataWriter msgWriter,
-                                    long blockCount, CryptoProgress<?> progress, BigInteger delta) {
+                                    long blockCount, Progress.Counter progress, BigInteger delta) {
     encryptByRandomDelta(cipherReader, msgWriter, blockCount, progress, delta);
   }
 
@@ -704,15 +705,15 @@ public final class SymmetricCryptoContext {
     }
   }
   
-  private void setupProgressIfPresent(CryptoProgress<?> progress, long blockCnt) {
+  private void setupProgressIfPresent(Progress.Counter progress, long blockCnt) {
     if (progress != null) {
-      progress.setBlockCount(blockCnt);
+      progress.setSubTaskCount(blockCnt);
     }
   }
   
-  private void incrementProgressIfPresent(CryptoProgress<?> progress) {
+  private void incrementProgressIfPresent(Progress.Counter progress) {
     if (progress != null) {
-      progress.incrementProcessedBlocksCount();
+      progress.incrementProgress();
     }
   }
 

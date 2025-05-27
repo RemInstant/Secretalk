@@ -56,11 +56,11 @@
     -fx-background-color: #afafaf;
 }
 
-/* TODO: move */
-.image-view:hover {
+.image-view.buttonImage:hover {
     /*-fx-scale-x: 1.1;*/
     /*-fx-scale-y: 1.1;*/
     -fx-effect: dropshadow(gaussian, white, 5, 0.3, 0, 0);
+    -fx-cursor: hand;
 }
 
 #leftBlock .scroll-pane .scroll-bar {
@@ -87,6 +87,8 @@
 
     -fx-font-size: 14pt;
     -fx-text-fill: black;
+
+    -fx-cursor: hand;
 }
 
 .secretChatEntry:hover {
@@ -192,11 +194,6 @@
     -fx-spacing: 5px;
 }
 
-/*to delete*/
-.messageHolder > .label {
-    -fx-font-size: 30pt;
-}
-
 .messageBlock {
     -fx-max-width: 288px;
     -fx-max-height: INFINITY;
@@ -214,6 +211,34 @@
     -fx-font-size: 14pt;
     -fx-text-fill: #181818;
     -fx-wrap-text: true;
+}
+
+
+.messageBlock .messageFileBlock {
+    -fx-spacing: 5pt;
+    -fx-alignment: center;
+}
+
+.messageBlock .messageFileImage:requesting {
+    -fx-cursor: hand;
+}
+
+.messageBlock .messageFileImage:loading {
+    -fx-cursor: wait;
+}
+
+.messageBlock .messageFileImage:completed {
+    -fx-cursor: hand;
+}
+
+.messageBlock .messageFileImage:failed {
+    -fx-cursor: default;
+}
+
+.messageBlock .messageFileLabel {
+    -fx-max-width: INFINITY;
+    -fx-font-size: 12pt;
+    -fx-text-fill: #181818;
 }
 
 .messageBlock .messageAuthor {
@@ -256,11 +281,9 @@
 
     -fx-font-size: 11pt;
 }
-
-
 /* Message block end */
-/* Attached file block begin */
 
+/* Attached file block begin */
 #attachedFileBlock {
     -fx-min-height: 30px;
     -fx-max-height: 30px;
@@ -287,10 +310,8 @@
     -fx-font-size: 16pt;
     -fx-cursor: hand;
 }
+/* Attached file block end */
 
-
-
-/* Attached file block begin */
 /* Chat footer begin */
 #chatFooter {
     -fx-border-width: 1px 0 0 0;

@@ -8,11 +8,14 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.rgielen.fxweaver.core.FxWeaver;
 import org.reminstant.concurrent.ChainExecutionException;
+import org.reminstant.concurrent.Progress;
 import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.ConcurrentUtil;
@@ -20,13 +23,14 @@ import org.reminstant.concurrent.functions.ThrowingFunction;
 import org.reminstant.cryptography.CryptoProvider;
 import org.reminstant.cryptography.context.CryptoProgress;
 import org.reminstant.cryptography.context.SymmetricCryptoContext;
-import org.reminstant.secretalk.client.application.control.MessageEntry;
 import org.reminstant.secretalk.client.component.DiffieHellmanGenerator;
 import org.reminstant.secretalk.client.component.ServerClient;
 import org.reminstant.secretalk.client.dto.DHResponse;
 import org.reminstant.secretalk.client.dto.JwtResponse;
 import org.reminstant.secretalk.client.dto.NoPayloadResponse;
 import org.reminstant.secretalk.client.dto.UserEventWrapperResponse;
+import org.reminstant.secretalk.client.model.HttpReceivingProgress;
+import org.reminstant.secretalk.client.model.HttpSendingProgress;
 import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.model.Chat;
 import org.reminstant.secretalk.client.model.event.*;
@@ -42,8 +46,9 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 import static java.nio.file.StandardOpenOption.*;
@@ -54,7 +59,7 @@ public class ApplicationStateManager {
 
   private static final long EVENT_CYCLE_TIMEOUT = 30000;
   private static final int DH_PRIVATE_KEY_BIT_LENGTH = 512;
-  private static final int FILE_PART_SIZE = 512;
+  private static final int FILE_PART_SIZE = 128 * (1 << 10);
 
   private static final String DIFFIE_HELLMAN_NOT_INIT_LOG = "DiffieHellmanGenerator is uninitialised";
 
@@ -68,6 +73,7 @@ public class ApplicationStateManager {
   private final Map<String, MessageLoadBundle> currentLoads;
   private final LocalStorage localStorage;
 
+  @Getter
   private Stage stage = null;
   private Scene loginScene = null;
   private Scene mainScene = null;
@@ -76,7 +82,7 @@ public class ApplicationStateManager {
 
   static {
     defaultHandler = rawEx -> {
-      while (rawEx instanceof ChainExecutionException &&
+      while ((rawEx instanceof ExecutionException || rawEx instanceof ChainExecutionException) &&
           rawEx.getCause() instanceof Exception ex) {
         rawEx = ex;
       }
@@ -113,12 +119,19 @@ public class ApplicationStateManager {
           log.error("Accessed an uninitialised module", ex);
           yield 609;
         }
+        case CancellationException _ -> {
+          log.trace("Message transmission was gracefully cancelled");
+          yield 610;
+        }
         case IOException ex -> {
           log.error("Failed to connect to the http server", ex);
           yield 0;
         }
         case ChainTransportIntException ex -> ex.getCargo();
-        default -> throw rawEx;
+        default -> {
+          log.error("Unhandled exception", rawEx);
+          throw rawEx;
+        }
       };
     };
   }
@@ -137,7 +150,7 @@ public class ApplicationStateManager {
 
   public void init(Stage stage) {
     this.stage = stage;
-    stage.setTitle("123");
+    stage.setTitle("Secretalk");
     showLoginScene(); // NOSONAR
 //    showMainScene(); // NOSONAR
     try {
@@ -156,8 +169,22 @@ public class ApplicationStateManager {
   public void initChatManager(Pane chatHolder, Label chatTitle,
                               StackPane chatStateBlockHolder, ScrollPane messageHolderWrapper,
                               Runnable onChatOpening, Runnable onChatClosing, Runnable onChatChanging) {
+    Function<Message, ChainableFuture<Integer>> onFileRequest = message -> {
+      String activeChatId = chatManager.getActiveChatId();
+      String otherUsername = chatManager.getChatOtherUsername(activeChatId);
+
+      DirectoryChooser directoryChooser = new DirectoryChooser();
+      File file = directoryChooser.showDialog(stage.getScene().getWindow());
+      if (file == null) {
+        return ChainableFuture.supplyWeaklyAsync(() -> 200);
+      }
+
+      Path path = file.toPath().resolve(message.getFileName());
+      return processFileRequest(message.getId(), activeChatId, otherUsername, path);
+    };
+
     chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper);
-    chatManager.initBehaviour(onChatOpening, onChatClosing, onChatChanging);
+    chatManager.initBehaviour(onChatOpening, onChatClosing, onChatChanging, onFileRequest);
     log.info("ChatManager INITIALIZED");
   }
 
@@ -200,8 +227,15 @@ public class ApplicationStateManager {
 
   public void processLogout() {
     stopEventCycle();
+
+//    for (MessageLoadBundle bundle : currentLoads.values()) {
+//      bundle.httpProgress.cancel(true);
+//    }
+    currentLoads.clear();
+
     serverClient.eraseCredentials();
     chatManager.reset();
+    localStorage.reset();
     log.info("LOG OUT");
     showLoginScene();
   }
@@ -344,38 +378,55 @@ public class ApplicationStateManager {
     Path filePath = file != null ? file.toPath() : null;
     String fileName = file != null ? file.getName() : null;
     Message message = new Message(
-        messageId, messageText, serverClient.getUsername(), filePath, true);
+        messageId, messageText, serverClient.getUsername(), fileName, true, filePath);
 
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           chatManager.insertMessage(chatId, message, false);
           CryptoProgress<byte[]> textProgress = cryptoContext.encryptAsync(data);
-          chatManager.startMessageEncryption(chatId, messageId, textProgress);
+          chatManager.startMessageEncryption(chatId, messageId, textProgress, false);
           byte[] encText = textProgress.getResult();
 
-          Path encTmpFilePath = null;
+          Path encTmpFilePath;
           if (file != null) {
-            encTmpFilePath = Files.createTempFile(fileName, "enc");
+            encTmpFilePath = localStorage.createTmpFile(fileName, "enc");
             String in = file.getPath();
             String out = encTmpFilePath.toString();
             CryptoProgress<Void> fileProgress = cryptoContext.encryptAsync(in, out);
-            chatManager.startMessageEncryption(chatId, messageId, fileProgress);
+            fileProgress.getFuture()
+                .thenWeaklyHandleAsync(getFileCancellationHandler(encTmpFilePath, "encrypting"));
+
+            chatManager.startMessageEncryption(chatId, messageId, fileProgress, true);
             fileProgress.getResult();
+          } else {
+            encTmpFilePath = null;
           }
 
-          Thread.sleep(200);
-          chatManager.startMessageTransmission(chatId, messageId);
-          NoPayloadResponse response = serverClient
-              .sendChatMessage(messageId, chatId, otherUsername, encText, fileName);
-          throwTransportIfStatusNotOk(response.getStatus());
+          Thread.sleep(100);
 
           if (file != null) {
-            HttpMultipartProgress httpProgress = processSendingFilePartly(
+            HttpSendingProgress httpProgress = processSendingFilePartly(
                 messageId, chatId, otherUsername, encTmpFilePath);
-            chatManager.startMessageTransmission(chatId, messageId, httpProgress);
+            chatManager.startMessageUpload(chatId, messageId, httpProgress, true);
             int status = httpProgress.getResult();
             throwTransportIfStatusNotOk(status);
+            Thread.sleep(500); // cancel gap
           }
+
+          HttpSendingProgress.Counter counter = new HttpSendingProgress.Counter();
+          counter.setFuture(ChainableFuture.supplyWeaklyAsync(() -> {
+            counter.setSubTaskCount(1);
+            NoPayloadResponse response = serverClient
+                .sendChatMessage(messageId, chatId, otherUsername, encText, fileName);
+            counter.incrementProgress();
+            return response.getStatus();
+          }));
+
+          HttpSendingProgress httpProgress = new HttpSendingProgress(counter);
+          chatManager.startMessageUpload(chatId, messageId, httpProgress, false);
+
+          int status = httpProgress.getResult();
+          throwTransportIfStatusNotOk(status);
 
           chatManager.completeMessage(chatId, messageId);
           return 200;
@@ -383,16 +434,39 @@ public class ApplicationStateManager {
         .thenWeaklyHandleAsync(defaultHandler);
   }
 
+  public ChainableFuture<Integer> processFileRequest(String messageId, String chatId,
+                                                     String otherUsername, Path filePath) {
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> {
+          Path loadPath = localStorage.createTmpFile(filePath.getFileName() + "_", "");
+
+          HttpReceivingProgress.Counter counter = new HttpReceivingProgress.Counter();
+          HttpReceivingProgress httpProgress = new HttpReceivingProgress(counter);
+          chatManager.startMessageDownload(chatId, messageId, filePath, httpProgress);
+          currentLoads.put(messageId,
+              new MessageLoadBundle(messageId, httpProgress, counter, loadPath, filePath));
+
+          NoPayloadResponse response = serverClient.requestMessageFile(messageId, chatId, otherUsername);
+          if (response.getStatus() != 200) {
+            currentLoads.remove(messageId);
+            return response.getStatus();
+          }
+
+          return 200;
+        })
+        .thenWeaklyHandleAsync(defaultHandler);
+  }
 
 
-  private HttpMultipartProgress processSendingFilePartly(String messageId, String chatId,
-                                                         String otherUser, Path path) {
-    HttpMultipartProgress progress = new HttpMultipartProgress();
+
+  private HttpSendingProgress processSendingFilePartly(String messageId, String chatId,
+                                                       String otherUser, Path path) {
+    HttpSendingProgress.Counter counter = new HttpSendingProgress.Counter();
     ChainableFuture<Integer> future = ChainableFuture
         .supplyWeaklyAsync(() -> {
           try (FileChannel fileChannel = FileChannel.open(path, READ, DELETE_ON_CLOSE)) {
             int partCnt = (int) Math.ceil(1. * fileChannel.size() / FILE_PART_SIZE);
-            progress.setRequestsCount(partCnt);
+            counter.setSubTaskCount(partCnt);
 
             for (int i = 0; i < partCnt; ++i) {
               byte[] part = new byte[FILE_PART_SIZE];
@@ -403,14 +477,14 @@ public class ApplicationStateManager {
               NoPayloadResponse response = serverClient
                   .sendFilePart(messageId, chatId, otherUser, i, partCnt, part);
               throwTransportIfStatusNotOk(response.getStatus());
-              progress.incrementProcessedBlocksCount();
+              counter.incrementProgress();
             }
             return 200;
           }
         })
         .thenWeaklyHandleAsync(defaultHandler);
-    progress.setFuture(future);
-    return progress;
+    counter.setFuture(future);
+    return new HttpSendingProgress(counter);
   }
 
 
@@ -466,6 +540,10 @@ public class ApplicationStateManager {
       return true;
     }
 
+    if (rawEvent == null) {
+      log.warn("got null event");
+      return false;
+    }
     if (rawEvent instanceof VoidEvent) {
       return true;
     }
@@ -537,44 +615,49 @@ public class ApplicationStateManager {
     chatManager.disconnectChat(event.getChatId(), event.getSenderUsername());
   }
 
-  private void handleChatMessageEvent(ChatMessageEvent event)
-      throws LocalStorageTmpFileException, LocalStorageWriteException {
-    Path filePath = null;
-    if (event.getAttachedFileName() != null) {
-      filePath = localStorage.createTmpFile(event.getAttachedFileName() + "_", "");
-    }
-
+  private void handleChatMessageEvent(ChatMessageEvent event) throws LocalStorageWriteException {
     String chatId = event.getChatId();
     SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(event.getChatId());
     String text = new String(cryptoContext.decrypt(event.getMessageData()));
     Message message = new Message(event.getMessageId(), text,
-        event.getSenderUsername(), filePath, false);
+        event.getSenderUsername(), event.getAttachedFileName(), false);
 
     chatManager.insertMessage(event.getChatId(), message, false);
-
-    if (filePath == null) {
+    if (event.getAttachedFileName() == null) {
       chatManager.completeMessage(chatId, message.getId());
     } else {
-      Path loadPath = Path.of(filePath + "_encrypted");
-      HttpMultipartProgress httpProgress = new HttpMultipartProgress();
-      chatManager.startMessageTransmission(chatId, message.getId(), httpProgress);
-      currentLoads.put(event.getMessageId(),
-          new MessageLoadBundle(message.getId(), httpProgress, loadPath, filePath));
+      chatManager.startMessageRequesting(chatId, message.getId());
     }
   }
 
   private void handleChatFileEvent(ChatFileEvent event) throws LocalStorageWriteException {
     MessageLoadBundle bundle = currentLoads.getOrDefault(event.getMessageId(), null);
+    String chatId = event.getChatId();
+    String messageId = event.getMessageId();
+
     if (bundle == null) {
       log.error("Got unexpected file part");
       return;
     }
+    if (bundle.progress().isCancelled()) {
+      if (bundle.loadPath != null) {
+        try {
+          Files.deleteIfExists(bundle.loadPath);
+        } catch (IOException ex) {
+          log.warn("Failed to delete loading encrypted file after cancellation", ex);
+        }
+        MessageLoadBundle cancelledBundle = new MessageLoadBundle(
+            messageId, bundle.progress, bundle.progressCounter, null, null);
+        currentLoads.put(messageId, cancelledBundle);
+      }
+      if (event.getPartNumber() + 1 == event.getPartCount()) {
+        currentLoads.remove(messageId);
+      }
+      return;
+    }
 
-    String chatId = event.getChatId();
-    String messageId = event.getMessageId();
-
-    if (bundle.httpProgress().getProgress() == 0) {
-      bundle.httpProgress().setRequestsCount(event.getPartCount());
+    if (event.getPartNumber() == 0) {
+      bundle.progressCounter.setSubTaskCount(event.getPartCount());
     }
 
     try (FileChannel fileChannel = FileChannel.open(bundle.loadPath, CREATE, WRITE)) {
@@ -589,9 +672,10 @@ public class ApplicationStateManager {
       chatManager.failMessage(chatId, messageId);
     }
 
-    bundle.httpProgress().incrementProcessedBlocksCount();
+    bundle.progressCounter().incrementProgress();
+//    bundle.httpProgress().setProcessedBlocksCount(event.getPartNumber() + 1);
 
-    if (bundle.httpProgress().isDone()) {
+    if (bundle.progress().isDone()) {
       SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(event.getChatId());
       String in = bundle.loadPath.toString();
       String out = bundle.resultPath.toString();
@@ -599,14 +683,22 @@ public class ApplicationStateManager {
       chatManager.startMessageDecryption(chatId, messageId, progress);
       progress.getFuture()
           .thenWeaklySupplyAsync(() -> {
+            try {
+              Files.deleteIfExists(bundle.loadPath);
+            } catch (IOException ex) {
+              log.warn("Failed to delete loaded encrypted file after decryption", ex);
+            }
             chatManager.completeMessage(chatId, messageId);
             return 200;
           })
+          .thenWeaklyHandleAsync(getFileCancellationHandler(bundle.resultPath, "decrypting"))
+          .thenWeaklyHandleAsync(getFileCancellationHandler(bundle.loadPath, "loaded encrypted"))
           .thenWeaklyHandleAsync(defaultHandler);
     }
   }
 
 
+  
   private void showLoginScene() {
     Objects.requireNonNull(stage, "Cannot show login scene because stage is uninitialised");
 
@@ -647,6 +739,23 @@ public class ApplicationStateManager {
     stage.setY((primScreenBounds.getHeight() - stage.getHeight()) / 2);
   }
 
+  private <T> ThrowingFunction<Exception, T> getFileCancellationHandler(Path path, String filePrefix) {
+    return originEx -> {
+      Exception ex = originEx;
+      while (ex instanceof ChainExecutionException && ex.getCause() instanceof Exception cause) {
+        ex = cause;
+      }
+      if (ex instanceof CancellationException) {
+        try {
+          Files.deleteIfExists(path);
+        } catch (IOException ioEx) {
+          log.warn("Failed to delete {} file after cancellation", filePrefix, ioEx);
+        }
+      }
+      throw originEx;
+    };
+  }
+  
   private void throwTransportIfStatusNotOk(int status) {
     if (status != 200) {
       throw new ChainTransportIntException(status);
@@ -655,7 +764,8 @@ public class ApplicationStateManager {
 
   private record MessageLoadBundle(
       String messageId,
-      HttpMultipartProgress httpProgress,
+      Progress<?> progress,
+      Progress.Counter progressCounter,
       Path loadPath,
       Path resultPath) {
   }

@@ -12,10 +12,10 @@
     <SplitPane dividerPositions="0.3">
         <AnchorPane fx:id="leftBlock" minWidth="150.0">
             <AnchorPane fx:id="menu" prefHeight="50.0" AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="0">
-                <ImageView fx:id="settingsButton" AnchorPane.leftAnchor="4" AnchorPane.topAnchor="12">
+                <ImageView fx:id="settingsButton" styleClass="buttonImage" AnchorPane.leftAnchor="4" AnchorPane.topAnchor="12">
                     <Image url="@../icons/filled/settingsIcon32x32.png"/>
                 </ImageView>
-                <ImageView fx:id="addChatButton" AnchorPane.rightAnchor="6" AnchorPane.topAnchor="12">
+                <ImageView fx:id="addChatButton" styleClass="buttonImage" AnchorPane.rightAnchor="6" AnchorPane.topAnchor="12">
                     <Image url="@../icons/filled/addChatIcon32x32.png"/>
                 </ImageView>
             </AnchorPane>
@@ -26,7 +26,7 @@
         <VBox fx:id="rightBlock">
             <AnchorPane fx:id="chatHeader">
                 <Label fx:id="chatTitle" AnchorPane.leftAnchor="40" AnchorPane.rightAnchor="40" AnchorPane.topAnchor="12"/>
-                <ImageView fx:id="deleteChatButton" AnchorPane.rightAnchor="8" AnchorPane.topAnchor="9">
+                <ImageView fx:id="deleteChatButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.topAnchor="9">
                     <Image url="@../icons/filled/disconnectIcon32x32.png"/>
                 </ImageView>
             </AnchorPane>
@@ -70,7 +70,7 @@
                 <Label fx:id="attachedFileCancelLabel">x</Label>
             </HBox>
             <AnchorPane fx:id="chatFooter">
-                <ImageView fx:id="attachFileButton" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
+                <ImageView fx:id="attachFileButton" styleClass="buttonImage" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
                     <Image url="@../icons/filled/attachIcon32x32.png"/>
                 </ImageView>
                 <ExpandableTextArea fx:id="messageInput"
@@ -78,7 +78,7 @@
                                     AnchorPane.leftAnchor="50" AnchorPane.rightAnchor="50"
                                     AnchorPane.topAnchor="4" AnchorPane.bottomAnchor="8"
                                     promptText="Сообщение..."/>
-                <ImageView fx:id="sendButton" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">
+                <ImageView fx:id="sendButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">
                     <Image url="@../icons/filled/sendIcon32x32.png"/>
                 </ImageView>
             </AnchorPane>
