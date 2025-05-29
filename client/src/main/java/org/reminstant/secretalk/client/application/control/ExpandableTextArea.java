@@ -4,6 +4,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextBoundsType;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -12,7 +13,8 @@ public class ExpandableTextArea extends TextArea {
   private final Text textHolder = new Text();
   private double rowHeight = 0;
 
-  private int maxLength = 256;
+  @Setter
+  private int maxLength = 1024;
 
   public ExpandableTextArea() {
     super();
@@ -34,10 +36,6 @@ public class ExpandableTextArea extends TextArea {
       }
       return change;
     }));
-  }
-
-  public void setMaxLength(int maxLength) {
-    this.maxLength = maxLength;
   }
 
   private double calculateHeight() {

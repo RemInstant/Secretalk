@@ -14,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
@@ -301,7 +302,7 @@ public class ServerClient {
     HttpResponse<String> response;
     try {
       log.debug("send {} {} | body: {}", request.method(), request.uri(), data);
-      response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 
       String bodyString = null;
       if (response.body() != null) {

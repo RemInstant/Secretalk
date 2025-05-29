@@ -8,6 +8,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -184,8 +185,7 @@ public class ApplicationStateManager {
 //    serverClient.saveCredentials("anonymous", ""); // NOSONAR
   }
 
-  public void initChatManager(Pane chatHolder, Label chatTitle, StackPane chatStateBlockHolder,
-                              ScrollPane messageHolderWrapper, AnchorPane chatFooter,
+  public void initChatManager(Pane chatHolder, Label chatHint, VBox chatBlock,
                               Runnable onChatOpening, Runnable onChatClosing, Runnable onChatChanging) {
     Function<Message, ChainableFuture<Integer>> onFileRequest = message -> {
       String activeChatId = chatManager.getActiveChatId();
@@ -201,8 +201,15 @@ public class ApplicationStateManager {
       return processFileRequest(message.getId(), activeChatId, otherUsername, path);
     };
 
-    chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper, chatFooter);
-    chatManager.initBehaviour(onChatOpening, onChatClosing, onChatChanging, onFileRequest);
+    try {
+      chatManager.initObjects(chatHolder, chatHint, chatBlock);
+      chatManager.initBehaviour(onChatOpening, onChatClosing, onChatChanging, onFileRequest);
+    } catch (ModuleInitialisationException ex) {
+      log.error("Failed to initialise chatManager", ex);
+      return;
+    }
+
+
     log.info("ChatManager INITIALIZED");
   }
 

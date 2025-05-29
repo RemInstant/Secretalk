@@ -3,6 +3,7 @@ package org.reminstant.secretalk.client.application;
 import javafx.application.HostServices;
 import javafx.beans.WeakInvalidationListener;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseButton;
@@ -45,6 +46,7 @@ public class ChatManager {
   private final HostServices hostServices;
 
   private Pane chatHolder = null;
+  private Label chatHint = null;
   private Label chatTitle = null;
   private ScrollPane messageHolderWrapper = null;
   private Function<Message, ChainableFuture<Integer>> onFileRequest = null;
@@ -102,35 +104,38 @@ public class ChatManager {
   }
 
 
-  public void initObjects(Pane chatHolder,
-                          Label chatTitle,
-                          StackPane chatStateBlockHolder,
-                          ScrollPane messageHolderWrapper,
-                          AnchorPane chatFooter) {
-    Objects.requireNonNull(chatHolder, "chatHolder cannot be null");
-    Objects.requireNonNull(chatTitle, "chatTitle cannot be null");
-    this.chatHolder = chatHolder;
-    this.chatTitle = chatTitle;
-    this.messageHolderWrapper = messageHolderWrapper;
+  public void initObjects(Pane chatHolder, Label chatHint, VBox chatBlock) throws ModuleInitialisationException {
+    try {
+      Parent chatHeader = FxUtil.getChildById(chatBlock, "chatHeader", Parent.class);
+      StackPane chatStateBlockHolder = FxUtil.getChildById(chatBlock, "chatStateBlockHolder", StackPane.class);
+      Parent chatFooter = FxUtil.getChildById(chatBlock, "chatFooter", Parent.class);
 
-    chatStateBlockHolder.getChildren().forEach(node -> {
-      if (node instanceof Pane pane) {
-        String stateName = pane.getId().replace("StateBlock", "").toUpperCase();
-        Chat.State state = Chat.State.valueOf(stateName);
-        stateBlocks.put(state, pane);
+      this.chatHolder = chatHolder;
+      this.chatHint = chatHint;
+      this.chatTitle = FxUtil.getChildById(chatHeader, "chatTitle", Label.class);
+      this.messageHolderWrapper = FxUtil.getChildById(chatBlock, "messageHolderWrapper", ScrollPane.class);
+
+      chatStateBlockHolder.getChildren().forEach(node -> {
+        if (node instanceof Pane pane) {
+          String stateName = pane.getId().replace("StateBlock", "").toUpperCase();
+          Chat.State state = Chat.State.valueOf(stateName);
+          stateBlocks.put(state, pane);
+        }
+      });
+      stateBlocks.values().forEach(holder -> holder.setVisible(false));
+
+      if (stateBlocks.size() != Chat.State.values().length) {
+        throw new FxControlNotFoundException("Some state blocks was not found");
       }
-    });
-    stateBlocks.values().forEach(holder -> holder.setVisible(false));
 
-    if (stateBlocks.size() != Chat.State.values().length) {
-      throw new IllegalArgumentException("Some state blocks was not found");
+      activeChatState.addListener(_ -> chatFooter.getChildrenUnmodifiable().forEach(node -> {
+        if (activeChatState.get() != null) {
+          node.setVisible(activeChatState.get().equals(Chat.State.CONNECTED));
+        }
+      }));
+    } catch (FxControlNotFoundException ex) {
+      throw new ModuleInitialisationException("Failed to initialise because some control was not found", ex);
     }
-
-    activeChatState.addListener(_ -> chatFooter.getChildren().forEach(node -> {
-      if (activeChatState.get() != null) {
-        node.setVisible(activeChatState.get().equals(Chat.State.CONNECTED));
-      }
-    }));
   }
 
   public void initBehaviour(Runnable onChatOpening,
@@ -183,7 +188,12 @@ public class ChatManager {
 
   public void reset() {
     throwIfUninitialised();
-    processingMessageEntries.values().forEach(MessageEntry::fail);
+    processingMessageEntries.values().forEach(entry -> {
+      Message.State state = entry.getMessage().getState();
+      if (state != Message.State.REQUESTING && state != Message.State.SENT) {
+        entry.fail();
+      }
+    });
     chatHolder.getChildren().clear();
     secretChatEntries.clear();
     messageHolders.clear();
@@ -324,6 +334,7 @@ public class ChatManager {
       activeChatState.set(null);
       chatHolder.getChildren().removeIf(node -> node instanceof SecretChatEntry entry &&
           entry.getChat().getId().equals(chatId));
+      updateChatHint();
     });
 
     secretChatEntries.remove(chatEntry.getChat().getId());
@@ -499,6 +510,7 @@ public class ChatManager {
       finalChatEntry.setOnMouseClicked(this::onSecretChatEntryClicked);
       messageHolder.getStyleClass().add("messageHolder");
       messageHolder.minHeightProperty().bind(messageHolderWrapper.heightProperty().subtract(2));
+      updateChatHint();
       log.debug("Created chat: {}", chat);
     });
   }
@@ -518,6 +530,14 @@ public class ChatManager {
     if (e.getButton().equals(MouseButton.PRIMARY) &&
         e.getSource() instanceof SecretChatEntry entry) {
       activeChat.set(entry);
+    }
+  }
+
+  private void updateChatHint() {
+    if (chatHolder.getChildren().isEmpty()) {
+      chatHint.setText("Нажмите на (+), чтобы создать чат");
+    } else {
+      chatHint.setText("Выберите чат");
     }
   }
 

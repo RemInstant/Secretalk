@@ -1,6 +1,9 @@
 package org.reminstant.secretalk.server.filter;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonFactoryBuilder;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,7 +39,7 @@ public class ResponseEnrichmentFilter extends OncePerRequestFilter {
     filterChain.doFilter(request, responseWrapper);
 
     String contentType = responseWrapper.getContentType();
-    if (contentType != null && contentType.equals(MediaType.APPLICATION_JSON_VALUE)) {
+    if (contentType != null && contentType.startsWith(MediaType.APPLICATION_JSON_VALUE)) {
       Map<String, Object> data;
       if (responseWrapper.getContentAsByteArray().length != 0) {
         data = ObjectMappers.defaultObjectMapper

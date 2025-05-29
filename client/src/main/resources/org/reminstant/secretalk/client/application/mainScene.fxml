@@ -12,8 +12,8 @@
     <SplitPane dividerPositions="0.3">
         <AnchorPane fx:id="leftBlock" minWidth="150.0">
             <AnchorPane fx:id="menu" prefHeight="50.0" AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="0">
-                <ImageView fx:id="settingsButton" styleClass="buttonImage" AnchorPane.leftAnchor="4" AnchorPane.topAnchor="12">
-                    <Image url="@../icons/filled/settingsIcon32x32.png"/>
+                <ImageView fx:id="exitButton" styleClass="buttonImage" AnchorPane.leftAnchor="4" AnchorPane.topAnchor="12">
+                    <Image url="@../icons/filled/exitIcon32x32.png"/>
                 </ImageView>
                 <ImageView fx:id="addChatButton" styleClass="buttonImage" AnchorPane.rightAnchor="6" AnchorPane.topAnchor="12">
                     <Image url="@../icons/filled/addChatIcon32x32.png"/>
@@ -23,69 +23,72 @@
                 <VBox fx:id="chatHolder" maxWidth="Infinity" prefHeight="150.0"/>
             </ScrollPane>
         </AnchorPane>
-        <VBox fx:id="rightBlock">
-            <AnchorPane fx:id="chatHeader">
-                <Label fx:id="chatTitle" AnchorPane.leftAnchor="40" AnchorPane.rightAnchor="40" AnchorPane.topAnchor="12"/>
-                <ImageView fx:id="deleteChatButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.topAnchor="9">
-                    <Image url="@../icons/filled/disconnectIcon32x32.png"/>
-                </ImageView>
-            </AnchorPane>
-            <StackPane fx:id="chatStateBlockHolder">
-                <HBox fx:id="pendingStateBlock" styleClass="stateBlock">
-                    <Label>Ожидание подключения собеседника</Label>
-                </HBox>
-                <HBox fx:id="awaitingStateBlock" styleClass="stateBlock">
-                    <Label>Запрос на соединение</Label>
+        <StackPane fx:id="rightBlock">
+            <Label fx:id="chatHint"/>
+            <VBox fx:id="chatBlock">
+                <AnchorPane fx:id="chatHeader">
+                    <Label fx:id="chatTitle" AnchorPane.leftAnchor="40" AnchorPane.rightAnchor="40" AnchorPane.topAnchor="12"/>
+                    <ImageView fx:id="deleteChatButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.topAnchor="9">
+                        <Image url="@../icons/filled/trashCanIcon32x32.png"/>
+                    </ImageView>
+                </AnchorPane>
+                <StackPane fx:id="chatStateBlockHolder">
+                    <HBox fx:id="pendingStateBlock" styleClass="stateBlock">
+                        <Label>Ожидание подключения собеседника</Label>
+                    </HBox>
+                    <HBox fx:id="awaitingStateBlock" styleClass="stateBlock">
+                        <Label>Запрос на соединение</Label>
+                        <Pane HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="chatConnectionAcceptButton" focusTraversable="false">
+                            подтвердить соединение
+                        </Button>
+                    </HBox>
+                    <HBox fx:id="connectedStateBlock" styleClass="stateBlock">
+                        <Label>Соединение установлено</Label>
+                        <Pane HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="chatConnectionBreakButton" focusTraversable="false">
+                            разорвать соединение
+                        </Button>
+                    </HBox>
+                    <HBox fx:id="disconnectedStateBlock" styleClass="stateBlock">
+                        <Label>Отсутствие соединения</Label>
+                        <Pane HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="chatConnectionRequestButton" focusTraversable="false">
+                            запросить соединение
+                        </Button>
+                    </HBox>
+                    <HBox fx:id="desertedStateBlock" styleClass="stateBlock">
+                        <Label>Собеседник покинул чат</Label>
+                    </HBox>
+                    <HBox fx:id="destroyedStateBlock" styleClass="stateBlock">
+                        <Label>Собеседник удалил чат</Label>
+                    </HBox>
+                </StackPane>
+                <ScrollPane fx:id="messageHolderWrapper" VBox.vgrow="ALWAYS"/> <!--filled programmatically-->
+                <HBox fx:id="attachedFileBlock">
+                    <Label fx:id="attachedFileTypeLabel"/>
+                    <Label fx:id="attachedFileLabel"/>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="chatConnectionAcceptButton" focusTraversable="false">
-                        подтвердить соединение
-                    </Button>
+                    <Label fx:id="attachedFileCancelLabel">x</Label>
                 </HBox>
-                <HBox fx:id="connectedStateBlock" styleClass="stateBlock">
-                    <Label>Соединение установлено</Label>
-                    <Pane HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="chatConnectionBreakButton" focusTraversable="false">
-                        разорвать соединение
-                    </Button>
-                </HBox>
-                <HBox fx:id="disconnectedStateBlock" styleClass="stateBlock">
-                    <Label>Отсутствие соединения</Label>
-                    <Pane HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="chatConnectionRequestButton" focusTraversable="false">
-                        запросить соединение
-                    </Button>
-                </HBox>
-                <HBox fx:id="desertedStateBlock" styleClass="stateBlock">
-                    <Label>Собеседник покинул чат</Label>
-                </HBox>
-                <HBox fx:id="destroyedStateBlock" styleClass="stateBlock">
-                    <Label>Собеседник удалил чат</Label>
-                </HBox>
-            </StackPane>
-            <ScrollPane fx:id="messageHolderWrapper" VBox.vgrow="ALWAYS"/> <!--filled programmatically-->
-            <HBox fx:id="attachedFileBlock">
-                <Label fx:id="attachedFileTypeLabel"></Label>
-                <Label fx:id="attachedFileLabel"></Label>
-                <Pane HBox.hgrow="ALWAYS"/>
-                <Label fx:id="attachedFileCancelLabel">x</Label>
-            </HBox>
-            <AnchorPane fx:id="chatFooter">
-                <ImageView fx:id="attachFileButton" styleClass="buttonImage" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
-                    <Image url="@../icons/filled/attachIcon32x32.png"/>
-                </ImageView>
-                <ImageView fx:id="attachImageButton" styleClass="buttonImage" AnchorPane.leftAnchor="45" AnchorPane.bottomAnchor="7">
-                    <Image url="@../icons/filled/attachImageIcon32x32.png"/>
-                </ImageView>
-                <ExpandableTextArea fx:id="messageInput"
-                                    focusTraversable="false"
-                                    AnchorPane.leftAnchor="85" AnchorPane.rightAnchor="50"
-                                    AnchorPane.topAnchor="4" AnchorPane.bottomAnchor="8"
-                                    promptText="Сообщение..."/>
-                <ImageView fx:id="sendButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">
-                    <Image url="@../icons/filled/sendIcon32x32.png"/>
-                </ImageView>
-            </AnchorPane>
-        </VBox>
+                <AnchorPane fx:id="chatFooter">
+                    <ImageView fx:id="attachFileButton" styleClass="buttonImage" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
+                        <Image url="@../icons/filled/attachIcon32x32.png"/>
+                    </ImageView>
+                    <ImageView fx:id="attachImageButton" styleClass="buttonImage" AnchorPane.leftAnchor="50" AnchorPane.bottomAnchor="7">
+                        <Image url="@../icons/filled/attachImageIcon32x32.png"/>
+                    </ImageView>
+                    <ExpandableTextArea fx:id="messageInput"
+                                        focusTraversable="false"
+                                        AnchorPane.leftAnchor="80" AnchorPane.rightAnchor="40"
+                                        AnchorPane.topAnchor="4" AnchorPane.bottomAnchor="8"
+                                        promptText="Сообщение..."/>
+                    <ImageView fx:id="sendButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">
+                        <Image url="@../icons/filled/sendIcon32x32.png"/>
+                    </ImageView>
+                </AnchorPane>
+            </VBox>
+        </StackPane>
     </SplitPane>
     <Pane fx:id="shadow" visible="false"/>
     <VBox fx:id="chatCreationBlock" styleClass="dialogBlock" visible="false">

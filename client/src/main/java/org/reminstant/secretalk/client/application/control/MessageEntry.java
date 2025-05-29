@@ -87,8 +87,10 @@ public class MessageEntry extends HBox {
     Label messageText = new Label(message.getText());
 
     if (message.getFilePath() != null && message.isImage()) {
-      fileImage = new ImageView(message.getFilePath().toUri().toString());
-      messageBlock.getChildren().add(fileImage);
+      if (Files.exists(message.getFilePath())) {
+        fileImage = new ImageView(message.getFilePath().toUri().toString());
+        messageBlock.getChildren().add(fileImage);
+      } // TODO: display no image info
     }
 
     if (!message.getText().isEmpty()) {

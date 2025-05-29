@@ -9,6 +9,7 @@ public class InternalStatus {
   public static final int OCCUPIED_USERNAME = 400004;
   public static final int NON_EXISTENT_USER = 400010;
   public static final int SELF_REQUEST = 400011;
+  public static final int TO_MUCH_DATA = 400012;
   public static final int RESOURCE_NOT_FOUND = 400020;
 
   public static int toHttpStatus(int internalStatus) {

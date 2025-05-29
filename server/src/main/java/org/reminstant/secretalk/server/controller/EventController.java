@@ -9,6 +9,7 @@ import org.reminstant.secretalk.server.repository.LocalFileStorage;
 import org.reminstant.secretalk.server.service.AppUserService;
 import org.reminstant.secretalk.server.service.NatsBrokerService;
 import org.reminstant.secretalk.server.util.InternalStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -39,9 +40,19 @@ public class EventController {
       .contentType(MediaType.APPLICATION_JSON)
       .body(new StatusWrapper(InternalStatus.SELF_REQUEST));
 
+  private static final ResponseEntity<StatusWrapper> tooMuchDataResponse = ResponseEntity
+      .status(HttpStatus.BAD_REQUEST)
+      .contentType(MediaType.APPLICATION_JSON)
+      .body(new StatusWrapper(InternalStatus.TO_MUCH_DATA));
+
   private final NatsBrokerService nats;
   private final AppUserService userService;
   private final LocalFileStorage fileStorage;
+
+  @Value("${chat.message.text-max-byte-length}")
+  private int textMaxByteLength;
+  @Value("${chat.message.file-part-byte-length}")
+  private int filePartByteLength;
 
   EventController(NatsBrokerService natsBrokerService,
                   AppUserService userService,
@@ -88,10 +99,10 @@ public class EventController {
 
   @GetMapping("${api.get-event}")
   ResponseEntity<UserEventWrapper> getEvent(HttpServletRequest request,
-                                            @RequestParam Long timeoutMillis,
+                                            @RequestParam(required = false) Long timeoutMillis,
                                             Principal principal) {
     logDebugHttpRequest(request, principal, null);
-    if (timeoutMillis == null || timeoutMillis < 100) {
+    if (timeoutMillis == null || timeoutMillis < 300) {
       timeoutMillis = 100L;
     }
 
@@ -107,7 +118,7 @@ public class EventController {
     }
 
     return ResponseEntity.ok()
-        .contentType(MediaType.APPLICATION_JSON)
+//        .contentType(MediaType.APPLICATION_JSON)
         .body(new UserEventWrapper(rawEvent));
   }
 
@@ -287,6 +298,9 @@ public class EventController {
     if (principal.getName().equals(data.otherUsername())) {
       return selfRequestResponse;
     }
+    if (data.messageData().length > textMaxByteLength) {
+      return tooMuchDataResponse;
+    }
 
     try {
       nats.sendChatMessage(data.messageId(), data.chatId(), principal.getName(),
@@ -316,11 +330,8 @@ public class EventController {
       return selfRequestResponse;
     }
 
-    if (data.imageData().length > 512 * (1 << 10)) {
-      // TODO: constant, status
-      return ResponseEntity.badRequest()
-          .contentType(MediaType.APPLICATION_JSON)
-          .build();
+    if (data.imageData().length > filePartByteLength) {
+      return tooMuchDataResponse;
     }
 
     try {

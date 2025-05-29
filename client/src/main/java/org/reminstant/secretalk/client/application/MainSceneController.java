@@ -36,7 +36,7 @@ public class MainSceneController implements Initializable {
   private final ApplicationStateManager stateManager;
   private final StatusDescriptionHolder statusDescriptionHolder;
 
-  @FXML private ImageView settingsButton;
+  @FXML private ImageView exitButton;
   @FXML private ImageView addChatButton;
   @FXML private ImageView deleteChatButton;
   @FXML private ImageView attachImageButton;
@@ -46,9 +46,10 @@ public class MainSceneController implements Initializable {
   @FXML private ScrollPane chatHolderScroll;
   @FXML private VBox chatHolder;
 
-  @FXML private VBox rightBlock;
-  @FXML private Label chatTitle;
+  @FXML private Label chatHint;
+  @FXML private VBox chatBlock;
 
+  @FXML private Label chatTitle;
   @FXML private StackPane chatStateBlockHolder;
   @FXML private Button chatConnectionAcceptButton;
   @FXML private Button chatConnectionRequestButton;
@@ -112,7 +113,7 @@ public class MainSceneController implements Initializable {
   public void initialize(URL url, ResourceBundle resourceBundle) {
     chatHolder.prefWidthProperty().bind(chatHolderScroll.widthProperty().subtract(4));
 
-    settingsButton.setOnMouseClicked(this::onSettingsButtonClicked);
+    exitButton.setOnMouseClicked(this::onExitButtonClicked);
     addChatButton.setOnMouseClicked(this::onAddChatButtonClicked);
     deleteChatButton.setOnMouseClicked(this::onDeleteChatButtonClicked);
     sendButton.setOnMouseClicked(this::onSendButtonClicked);
@@ -134,18 +135,22 @@ public class MainSceneController implements Initializable {
     chatDeletionButton.setOnMouseClicked(this::onChatDeletionButtonClicked);
     chatDeletionCancelButton.setOnMouseClicked(this::onChatDeletionCancelButtonClicked);
 
-    rightBlock.getChildren().forEach(node -> node.setVisible(false));
+    chatBlock.setVisible(false);
 
-    Runnable onChatOpening = () -> rightBlock.getChildren().forEach(node -> node.setVisible(true));
-    Runnable onChatClosing = () -> rightBlock.getChildren().forEach(node -> node.setVisible(false));
+    Runnable onChatOpening = () -> {
+      chatHint.setVisible(false);
+      chatBlock.setVisible(true);
+    };
+    Runnable onChatClosing = () -> {
+      chatHint.setVisible(true);
+      chatBlock.setVisible(false);
+    };
     Runnable onChatChanging = () -> {
       detachFile();
       messageInput.clear();
     };
 
-    stateManager.initChatManager(
-        chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper, chatFooter,
-        onChatOpening, onChatClosing, onChatChanging);
+    stateManager.initChatManager(chatHolder, chatHint, chatBlock, onChatOpening, onChatClosing, onChatChanging);
     log.info("MainSceneController INITIALIZED");
   }
 
@@ -181,8 +186,8 @@ public class MainSceneController implements Initializable {
     attachedFileLabel.setText(path.getFileName().toString());
     attachedFileLabel.setTooltip(new Tooltip(path.getFileName().toString()));
     if (attachedFile == null) {
-      int pos = rightBlock.getChildren().size() - 1;
-      rightBlock.getChildren().add(pos, attachedFileBlock);
+      int pos = chatBlock.getChildren().size() - 1;
+      chatBlock.getChildren().add(pos, attachedFileBlock);
     }
     attachedFile = path;
     isImageFileAttached = isImage;
@@ -190,7 +195,7 @@ public class MainSceneController implements Initializable {
 
   private void detachFile() {
     attachedFile = null;
-    rightBlock.getChildren().remove(attachedFileBlock);
+    chatBlock.getChildren().remove(attachedFileBlock);
   }
 
 
@@ -322,7 +327,7 @@ public class MainSceneController implements Initializable {
 
 
 
-  private void onSettingsButtonClicked(MouseEvent e) {
+  private void onExitButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       stateManager.processLogout();
     }
