@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.reminstant.secretalk.client.dto.*;
-import org.reminstant.secretalk.client.exception.InvalidServerAnswer;
+import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.secretalk.client.model.Chat;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +29,7 @@ public class ServerClient {
   private static final String CONTENT_TYPE_HEADER = "Content-Type";
   private static final String CONTENT_TYPE_HEADER_APPLICATION_JSON = "application/json";
 
-  private static final Duration STANDARD_TIMEOUT = Duration.ofSeconds(30);
+  private static final Duration STANDARD_TIMEOUT = Duration.ofSeconds(10);
   
   private static final HttpClient httpClient = HttpClient.newHttpClient();
   private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -39,7 +39,8 @@ public class ServerClient {
   private String jwtToken = null;
 
 
-  public JwtResponse processLogin(String login, String password) throws IOException, InvalidServerAnswer {
+  public JwtResponse processLogin(String login, String password)
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     String data = login + ":" + password;
     String base64data = Base64.getEncoder().encodeToString(data.getBytes());
 
@@ -50,11 +51,11 @@ public class ServerClient {
         .build(), null, JwtResponse.class);
   }
 
-  public NoPayloadResponse processRegister(String login, String password) throws IOException, InvalidServerAnswer {
+  public NoPayloadResponse processRegister(String login, String password) throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "username", login,
         "password", password);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/auth/register"))
@@ -76,7 +77,8 @@ public class ServerClient {
 
 
 
-  public DHResponse getDHParams() throws IOException, InvalidServerAnswer {
+  public DHResponse getDHParams()
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/get-dh-params"))
         .GET()
@@ -85,7 +87,8 @@ public class ServerClient {
 
 
 
-  public UserEventWrapperResponse getEvent(long timeoutMillis) throws IOException, InvalidServerAnswer {
+  public UserEventWrapperResponse getEvent(long timeoutMillis)
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/get-event?timeoutMillis=%d"
             .formatted(timeoutMillis)))
@@ -94,9 +97,10 @@ public class ServerClient {
         .build(), null, UserEventWrapperResponse.class);
   }
 
-  public NoPayloadResponse acknowledgeEvent(String eventId) throws IOException, InvalidServerAnswer {
+  public NoPayloadResponse acknowledgeEvent(String eventId)
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of("eventId", eventId);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/ack-event"))
@@ -109,11 +113,11 @@ public class ServerClient {
 
 
   public NoPayloadResponse desertChat(String chatId, String otherUsername)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/desert-chat"))
@@ -124,11 +128,11 @@ public class ServerClient {
   }
 
   public NoPayloadResponse destroyChat(String chatId, String otherUsername)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/destroy-chat"))
@@ -140,30 +144,30 @@ public class ServerClient {
 
   public NoPayloadResponse requestChatConnection(String chatId, String otherUsername,
                                                  Chat.Configuration config, String publicKey)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername,
         "chatConfiguration", config,
         "publicKey", publicKey);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/request-chat-connection"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))
-        .timeout(Duration.ofMillis(1000))
+        .timeout(STANDARD_TIMEOUT)
         .build(), data, UserEventWrapperResponse.class);
   }
 
   public NoPayloadResponse acceptChatConnection(String chatId, String otherUsername, String publicKey)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername,
         "publicKey", publicKey);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/accept-chat-connection"))
@@ -174,11 +178,11 @@ public class ServerClient {
   }
 
   public NoPayloadResponse breakChatConnection(String chatId, String otherUsername)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "chatId", chatId,
         "otherUsername", otherUsername);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/break-chat-connection"))
@@ -190,7 +194,7 @@ public class ServerClient {
 
   public NoPayloadResponse sendChatMessage(String messageId, String chatId, String otherUsername,
                                            byte[] messageData, String attachedFileName)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data;
     if (attachedFileName == null) {
       data = Map.of(
@@ -206,7 +210,7 @@ public class ServerClient {
           "messageData", messageData,
           "attachedFileName", attachedFileName);
     }
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/send-chat-message"))
@@ -218,7 +222,7 @@ public class ServerClient {
 
   public NoPayloadResponse sendFilePart(String messageId, String chatId, String otherUsername,
                                         int partNumber, int partCount, byte[] fileData)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "messageId", messageId,
         "chatId", chatId,
@@ -226,7 +230,7 @@ public class ServerClient {
         "partNumber", partNumber,
         "partCount", partCount,
         "fileData", fileData);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/send-file-part"))
@@ -237,12 +241,12 @@ public class ServerClient {
   }
 
   public NoPayloadResponse requestMessageFile(String messageId, String chatId, String otherUsername)
-      throws IOException, InvalidServerAnswer {
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "messageId", messageId,
         "chatId", chatId,
         "otherUsername", otherUsername);
-    String json = objectMapper.writeValueAsString(data);
+    String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/request-message-file"))
@@ -254,9 +258,17 @@ public class ServerClient {
 
 
 
+  private String jsonifyMap(Map<String, ?> data) {
+    try {
+      return objectMapper.writeValueAsString(data);
+    } catch (JsonProcessingException ex) {
+      throw new ServerRequestPreparationException(ex);
+    }
+  }
+  
   private <T> T sendRequest(HttpRequest request, Map<String, Object> data, Class<T> c)
-      throws IOException, InvalidServerAnswer {
-    HttpResponse<String> response = null;
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
+    HttpResponse<String> response;
     try {
       log.debug("send {} {} | body: {}", request.method(), request.uri(), data);
       response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -268,21 +280,22 @@ public class ServerClient {
       }
       log.debug("get {} {} - code {} | body: {}", request.method(), request.uri(),
           response.statusCode(), bodyString);
+    } catch (IOException ex) {
+      throw new ServerConnectionException(ex);
     } catch (InterruptedException ex) {
       log.debug("{} {} - cancelled", request.method(), request.uri());
-      Thread.currentThread().interrupt();
-      return null;
+      throw ex;
     }
 
     if (response.body() == null || response.body().isEmpty()) {
-      throw new InvalidServerAnswer(request.uri(), "no body");
+      throw new UnexpectedServerResponseException(request.uri(), "no body");
     }
 
     try {
       return objectMapper.readValue(response.body(), c);
     } catch (JsonProcessingException ex) {
       log.error("Failed to parse server response", ex);
-      throw new InvalidServerAnswer(request.uri(), "Invalid body: " + response.body(), ex);
+      throw new UnparsableServerResponseException(request.uri(), "Invalid body: " + response.body(), ex);
     }
   }
 }

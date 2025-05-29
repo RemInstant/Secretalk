@@ -6,7 +6,9 @@ import org.reminstant.secretalk.server.dto.http.*;
 import org.reminstant.secretalk.server.dto.nats.UserEvent;
 import org.reminstant.secretalk.server.exception.LocalFileStorageException;
 import org.reminstant.secretalk.server.repository.LocalFileStorage;
+import org.reminstant.secretalk.server.service.AppUserService;
 import org.reminstant.secretalk.server.service.NatsBrokerService;
+import org.reminstant.secretalk.server.util.InternalStatus;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,14 +21,33 @@ import java.util.Map;
 @Slf4j
 @RestController
 public class EventController {
-
+  
   private static final int FILE_BLOCK_BYTE_SIZE = 128 * (1 << 10);
 
+  private static final ResponseEntity<StatusWrapper> internalErrorResponse = ResponseEntity
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
+      .contentType(MediaType.APPLICATION_JSON)
+      .build();
+
+  private static final ResponseEntity<StatusWrapper> nonExistentUserResponse = ResponseEntity
+      .status(HttpStatus.BAD_REQUEST)
+      .contentType(MediaType.APPLICATION_JSON)
+      .body(new StatusWrapper(InternalStatus.NON_EXISTENT_USER));
+
+  private static final ResponseEntity<StatusWrapper> selfRequestResponse = ResponseEntity
+      .status(HttpStatus.BAD_REQUEST)
+      .contentType(MediaType.APPLICATION_JSON)
+      .body(new StatusWrapper(InternalStatus.SELF_REQUEST));
+
   private final NatsBrokerService nats;
+  private final AppUserService userService;
   private final LocalFileStorage fileStorage;
 
-  EventController(NatsBrokerService natsBrokerService, LocalFileStorage fileStorage) {
+  EventController(NatsBrokerService natsBrokerService,
+                  AppUserService userService,
+                  LocalFileStorage fileStorage) {
     this.nats = natsBrokerService;
+    this.userService = userService;
     this.fileStorage = fileStorage;
   }
 
@@ -91,7 +112,7 @@ public class EventController {
   }
 
   @PostMapping("${api.acknowledge-event}")
-  ResponseEntity<Void> getEvent(HttpServletRequest request,
+  ResponseEntity<Void> ackEvent(HttpServletRequest request,
                                 @RequestBody EventGetData data,
                                 Principal principal) {
     logDebugHttpRequest(request, principal, data);
@@ -119,15 +140,22 @@ public class EventController {
 
 
   @PostMapping("${api.request-chat-connection}")
-  ResponseEntity<Void> requestChatConnection(HttpServletRequest request,
-                                             @RequestBody ChatConnectionRequestData data,
-                                             Principal principal) {
+  ResponseEntity<StatusWrapper> requestChatConnection(HttpServletRequest request,
+                                                      @RequestBody ChatConnectionRequestData data,
+                                                      Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
+
     try {
       nats.sendChatConnectionRequest(data.chatId(), principal.getName(),
           data.otherUsername(), data.chatConfiguration(), data.publicKey());
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
@@ -140,15 +168,22 @@ public class EventController {
   }
 
   @PostMapping("${api.accept-chat-connection}")
-  ResponseEntity<Void> acceptChatConnection(HttpServletRequest request,
-                                            @RequestBody ChatConnectionAcceptData data,
+  ResponseEntity<StatusWrapper> acceptChatConnection(HttpServletRequest request,
+                                                    @RequestBody ChatConnectionAcceptData data,
                                             Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
+
     try {
       nats.sendChatConnectionAcceptance(data.chatId(),
           principal.getName(), data.otherUsername(), data.publicKey());
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
@@ -161,14 +196,21 @@ public class EventController {
   }
 
   @PostMapping("${api.break-chat-connection}")
-  ResponseEntity<Void> breakChatConnection(HttpServletRequest request,
-                                           @RequestBody ChatCommonData data,
-                                           Principal principal) {
+  ResponseEntity<StatusWrapper> breakChatConnection(HttpServletRequest request,
+                                                    @RequestBody ChatCommonData data,
+                                                    Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
+
     try {
       nats.sendChatConnectionBreak(data.chatId(), principal.getName(), data.otherUsername());
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
@@ -181,14 +223,21 @@ public class EventController {
   }
 
   @PostMapping("${api.desert-chat}")
-  ResponseEntity<Void> desertChat(HttpServletRequest request,
-                                  @RequestBody ChatCommonData data,
-                                  Principal principal) {
+  ResponseEntity<StatusWrapper> desertChat(HttpServletRequest request,
+                                           @RequestBody ChatCommonData data,
+                                           Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
+
     try {
       nats.sendChatDeserting(data.chatId(), principal.getName(), data.otherUsername());
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
@@ -201,14 +250,21 @@ public class EventController {
   }
 
   @PostMapping("${api.destroy-chat}")
-  ResponseEntity<Void> destroyChat(HttpServletRequest request,
-                                   @RequestBody ChatCommonData data,
-                                   Principal principal) {
+  ResponseEntity<StatusWrapper> destroyChat(HttpServletRequest request,
+                                            @RequestBody ChatCommonData data,
+                                            Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
+
     try {
       nats.sendChatDestroying(data.chatId(), principal.getName(), data.otherUsername());
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
@@ -221,16 +277,22 @@ public class EventController {
   }
 
   @PostMapping("${api.send-chat-message}")
-  ResponseEntity<Void> sendChatMessage(HttpServletRequest request,
-                                       @RequestBody ChatMessageData data,
-                                       Principal principal) {
+  ResponseEntity<StatusWrapper> sendChatMessage(HttpServletRequest request,
+                                                @RequestBody ChatMessageData data,
+                                                Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
 
     try {
       nats.sendChatMessage(data.messageId(), data.chatId(), principal.getName(),
           data.otherUsername(), data.messageData(), data.attachedFileName());
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
+      log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .contentType(MediaType.APPLICATION_JSON)
@@ -243,10 +305,16 @@ public class EventController {
   }
 
   @PostMapping("${api.send-file-part}")
-  ResponseEntity<Void> sendFilePart(HttpServletRequest request,
-                                    @RequestBody ChatFileData data,
-                                    Principal principal) {
+  ResponseEntity<StatusWrapper> sendFilePart(HttpServletRequest request,
+                                             @RequestBody ChatFileData data,
+                                             Principal principal) {
     logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
 
     String fileName = data.chatId() + data.messageId();
     try {
@@ -266,23 +334,24 @@ public class EventController {
   }
 
   @PostMapping("${api.request-message-file}")
-  ResponseEntity<Void> requestMessageFile(HttpServletRequest request,
-                                          @RequestBody MessageFileRequestData data,
-                                          Principal principal) {
+  ResponseEntity<StatusWrapper> requestMessageFile(HttpServletRequest request,
+                                                   @RequestBody MessageFileRequestData data,
+                                                   Principal principal) {
     logDebugHttpRequest(request, principal, data);
-
-    ResponseEntity<Void> response500 = ResponseEntity
-        .status(HttpStatus.INTERNAL_SERVER_ERROR)
-        .contentType(MediaType.APPLICATION_JSON)
-        .build();
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
 
     String fileName = data.chatId() + data.messageId();
     try {
       if (!fileStorage.isFileExist(fileName)) {
         return ResponseEntity
-            .status(HttpStatus.BAD_REQUEST) //TODO: custom status
+            .status(HttpStatus.BAD_REQUEST)
             .contentType(MediaType.APPLICATION_JSON)
-            .build();
+            .body(new StatusWrapper(InternalStatus.RESOURCE_NOT_FOUND));
       }
 
       long fileSize = fileStorage.getFileSize(fileName);
@@ -307,10 +376,10 @@ public class EventController {
       }
     } catch (LocalFileStorageException ex) {
       log.error("File storage exception", ex);
-      return response500;
+      return internalErrorResponse;
     } catch (Exception ex) {
-      log.error("Failed to send NATS event", ex);
-      return response500;
+      log.error("Failed to send NATS event", ex); // NOSONAR
+      return internalErrorResponse;
     }
 
     try {

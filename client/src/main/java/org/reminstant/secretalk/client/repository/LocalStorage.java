@@ -206,8 +206,8 @@ public class LocalStorage {
       Path chatStaticDataPath = getStaticDataPath(chatId);
       Path chatDynamicDataPath = getDynamicDataPath(chatId);
 
-      Files.delete(chatStaticDataPath);
-      Files.delete(chatDynamicDataPath);
+      Files.deleteIfExists(chatStaticDataPath);
+      Files.deleteIfExists(chatDynamicDataPath);
     } catch (Exception e) {
       throw new LocalStorageDeletionException("Failed to delete chat data");
     } finally {

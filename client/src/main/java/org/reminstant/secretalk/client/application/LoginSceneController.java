@@ -14,6 +14,7 @@ import net.rgielen.fxweaver.core.FxmlView;
 import org.reminstant.concurrent.ConcurrentUtil;
 import org.reminstant.secretalk.client.application.control.NotificationLabel;
 import org.reminstant.secretalk.client.application.control.SwipableAnchorPane;
+import org.reminstant.secretalk.client.util.ClientStatus;
 import org.reminstant.secretalk.client.util.FxUtil;
 import org.reminstant.secretalk.client.util.StatusDescriptionHolder;
 import org.slf4j.Logger;
@@ -90,7 +91,7 @@ public class LoginSceneController implements Initializable {
 
     stateManager.processLogin(login, password).thenWeaklyConsumeAsync(status -> {
       FxUtil.runOnFxThread(() -> {
-        if (status == 200) {
+        if (status == ClientStatus.OK) {
           clearLoginSide();
         } else {
           String desc = statusDescriptionHolder.getDescription(status, "loginStatus");
@@ -112,7 +113,7 @@ public class LoginSceneController implements Initializable {
     stateManager.processRegister(login, password).thenWeaklyConsumeAsync(status -> {
       String desc = statusDescriptionHolder.getDescription(status, "registerStatus");
       FxUtil.runOnFxThread(() -> {
-        if (status == 200) {
+        if (status == ClientStatus.OK) {
           swipeToLogin();
           loginNotificationLabel.showSuccess(desc);
         } else {
@@ -122,8 +123,6 @@ public class LoginSceneController implements Initializable {
         backToLoginButton.setDisable(false);
       });
     });
-
-    // TODO: добавить иконку загрузки
   }
 
   private void swipeToReg() {

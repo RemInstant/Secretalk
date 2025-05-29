@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.reminstant.secretalk.server.util.InternalStatus;
 import org.reminstant.secretalk.server.util.ObjectMappers;
 import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
@@ -36,7 +37,7 @@ public class ResponseEnrichmentFilter extends OncePerRequestFilter {
 
     String contentType = responseWrapper.getContentType();
     if (contentType != null && contentType.equals(MediaType.APPLICATION_JSON_VALUE)) {
-      Map<String, String> data;
+      Map<String, Object> data;
       if (responseWrapper.getContentAsByteArray().length != 0) {
         data = ObjectMappers.defaultObjectMapper
             .readValue(responseWrapper.getContentAsByteArray(), new TypeReference<>() {});
@@ -47,9 +48,10 @@ public class ResponseEnrichmentFilter extends OncePerRequestFilter {
       DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
       dateFormat.setTimeZone(TimeZone.getTimeZone(ZoneOffset.UTC));
       String timestamp = dateFormat.format(new Date()).replace("Z", "+00:00");
+      int internalStatus = InternalStatus.fromHttpStatus(responseWrapper.getStatus());
 
       data.putIfAbsent("timestamp", timestamp);
-      data.putIfAbsent("status", String.valueOf(responseWrapper.getStatus()));
+      data.putIfAbsent("internalStatus", internalStatus);
 
       responseWrapper.resetBuffer();
       responseWrapper.getWriter().write(ObjectMappers.defaultObjectMapper.writeValueAsString(data));

@@ -89,15 +89,15 @@
         <Label styleClass="blockTitle">Создание чата</Label>
         <Label styleClass="inputLabel">Собеседник</Label>
         <VBox styleClass="inputHolder">
-            <TextField fx:id="chatCreatingUsernameField" styleClass="input"/>
+            <TextField fx:id="chatCreationUsernameField" styleClass="input"/>
         </VBox>
         <Label styleClass="inputLabel">Название чата</Label>
         <VBox styleClass="inputHolder">
-            <TextField fx:id="chatCreatingTitleField" styleClass="input" promptText="Автогенерация"/>
+            <TextField fx:id="chatCreationTitleField" styleClass="input" promptText="Автогенерация"/>
         </VBox>
         <Label styleClass="inputLabel">Алгоритм шифрования</Label>
         <VBox styleClass="inputHolder">
-            <ChoiceBox fx:id="chatCreatingAlgoChoice" value="Serpent" focusTraversable="false" styleClass="input">
+            <ChoiceBox fx:id="chatCreationAlgoChoice" value="Serpent" styleClass="input">
                 <items>
                     <FXCollections fx:factory="observableArrayList">
                         <String fx:value="DES"/>
@@ -110,7 +110,7 @@
         </VBox>
         <Label styleClass="inputLabel">Режим шифрования</Label>
         <VBox styleClass="inputHolder">
-            <ChoiceBox fx:id="chatCreatingModeChoice" value="RD" focusTraversable="false" styleClass="input">
+            <ChoiceBox fx:id="chatCreationModeChoice" value="RD" styleClass="input">
                 <items>
                     <FXCollections fx:factory="observableArrayList">
                         <String fx:value="ECB"/>
@@ -126,7 +126,7 @@
         </VBox>
         <Label styleClass="inputLabel">Режим набивки</Label>
         <VBox styleClass="inputHolder">
-            <ChoiceBox fx:id="chatCreatingPaddingChoice" value="ISO 10126" focusTraversable="false" styleClass="input">
+            <ChoiceBox fx:id="chatCreationPaddingChoice" value="ISO 10126" styleClass="input">
                 <items>
                     <FXCollections fx:factory="observableArrayList">
                         <String fx:value="ZEROS"/>
@@ -141,11 +141,11 @@
         <Pane VBox.vgrow="ALWAYS"/>
         <HBox styleClass="buttonHolderWrapper">
             <VBox styleClass="buttonHolder">
-                <Button fx:id="chatCreatingButton" focusTraversable="false">Создать</Button>
+                <Button fx:id="chatCreationButton">Создать</Button>
             </VBox>
             <Pane HBox.hgrow="ALWAYS"/>
             <VBox styleClass="buttonHolder">
-                <Button fx:id="chatCreatingCancelButton" focusTraversable="false">Отмена</Button>
+                <Button fx:id="chatCreationCancelButton">Отмена</Button>
             </VBox>
         </HBox>
     </VBox>

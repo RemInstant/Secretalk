@@ -1,11 +1,11 @@
 package org.reminstant.secretalk.client.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.DirectoryChooser;
@@ -35,6 +35,7 @@ import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.model.Chat;
 import org.reminstant.secretalk.client.model.event.*;
 import org.reminstant.secretalk.client.repository.LocalStorage;
+import org.reminstant.secretalk.client.util.ClientStatus;
 import org.reminstant.secretalk.client.util.FxUtil;
 import org.springframework.stereotype.Component;
 
@@ -61,8 +62,6 @@ public class ApplicationStateManager {
   private static final int DH_PRIVATE_KEY_BIT_LENGTH = 512;
   private static final int FILE_PART_SIZE = 128 * (1 << 10);
 
-  private static final String DIFFIE_HELLMAN_NOT_INIT_LOG = "DiffieHellmanGenerator is uninitialised";
-
   private static final ThrowingFunction<Exception, Integer> defaultHandler;
 
   private final FxWeaver fxWeaver;
@@ -87,45 +86,58 @@ public class ApplicationStateManager {
         rawEx = ex;
       }
       return switch (rawEx) {
-        case InvalidServerAnswer ex -> {
-          log.error("Got invalid server answer", ex);
-          yield 602;
-        }
-        case LocalStorageReadException ex -> {
-          log.error("Failed to read data from the local storage", ex);
-          yield 603;
-        }
-        case LocalStorageWriteException ex -> {
-          log.error("Failed to write data into the local storage", ex);
-          yield 604;
-        }
-        case LocalStorageTmpFileException ex -> {
-          log.error("Failed to create tmp file in the local storage", ex);
-          yield 605;
-        }
+        // GENERAL
         case ModuleInitialisationException ex -> {
           log.error("Failed to initialise one of app modules", ex);
-          yield 606;
-        }
-        case IllegalChatManagerRequest ex -> {
-          log.error("Got illegal chat request (probably foreign)", ex);
-          yield 607;
-        }
-        case LocalStorageDeletionException ex -> {
-          log.error("Failed to delete file in the local storage", ex);
-          yield 608;
+          yield ClientStatus.MODULE_INITIALISATION_FAILURE;
         }
         case ModuleUninitialisedStateException ex -> {
           log.error("Accessed an uninitialised module", ex);
-          yield 609;
+          yield ClientStatus.MODULE_UNINITIALISED_ACCESS;
         }
+        case ServerConnectionException ex -> {
+          log.error("Failed to connect to the http server", ex);
+          yield ClientStatus.SERVER_CONNECTION_FAILURE;
+        }
+        // SERVER
+        case UnexpectedServerResponseException ex -> {
+          log.error("Got unexpected server response", ex);
+          yield ClientStatus.SERVER_UNEXPECTED_RESPONSE;
+        }
+        case UnparsableServerResponseException ex -> {
+          log.error("Got unparsable server response", ex);
+          yield ClientStatus.SERVER_RESPONSE_PARSE_FAILURE;
+        }
+        case ServerResponseException ex -> {
+          log.error("Server response processing exception", ex);
+          yield ClientStatus.SERVER_RESPONSE_ERROR;
+        }
+        // CHAT MANAGER
+        case IllegalChatManagerRequest ex -> {
+          log.error("Got illegal chat request (probably foreign)", ex);
+          yield ClientStatus.CHAT_ILLEGAL_REQUEST;
+        }
+        // LOCAL STORAGE
+        case LocalStorageReadException ex -> {
+          log.error("Failed to read data from the local storage", ex);
+          yield ClientStatus.STORAGE_READ_FAILURE;
+        }
+        case LocalStorageWriteException ex -> {
+          log.error("Failed to write data into the local storage", ex);
+          yield ClientStatus.STORAGE_WRITE_FAILURE;
+        }
+        case LocalStorageTmpFileException ex -> {
+          log.error("Failed to create tmp file in the local storage", ex);
+          yield ClientStatus.STORAGE_TMP_CREATION_FAILURE;
+        }
+        case LocalStorageDeletionException ex -> {
+          log.error("Failed to delete file in the local storage", ex);
+          yield ClientStatus.STORAGE_DELETION_FAILURE;
+        }
+        // OTHER
         case CancellationException _ -> {
           log.trace("Message transmission was gracefully cancelled");
-          yield 610;
-        }
-        case IOException ex -> {
-          log.error("Failed to connect to the http server", ex);
-          yield 0;
+          yield ClientStatus.OK;
         }
         case ChainTransportIntException ex -> ex.getCargo();
         default -> {
@@ -166,8 +178,8 @@ public class ApplicationStateManager {
 //    serverClient.saveCredentials("anonymous", ""); // NOSONAR
   }
 
-  public void initChatManager(Pane chatHolder, Label chatTitle,
-                              StackPane chatStateBlockHolder, ScrollPane messageHolderWrapper,
+  public void initChatManager(Pane chatHolder, Label chatTitle, StackPane chatStateBlockHolder,
+                              ScrollPane messageHolderWrapper, AnchorPane chatFooter,
                               Runnable onChatOpening, Runnable onChatClosing, Runnable onChatChanging) {
     Function<Message, ChainableFuture<Integer>> onFileRequest = message -> {
       String activeChatId = chatManager.getActiveChatId();
@@ -176,14 +188,14 @@ public class ApplicationStateManager {
       DirectoryChooser directoryChooser = new DirectoryChooser();
       File file = directoryChooser.showDialog(stage.getScene().getWindow());
       if (file == null) {
-        return ChainableFuture.supplyWeaklyAsync(() -> 200);
+        return ChainableFuture.supplyWeaklyAsync(() -> ClientStatus.OK);
       }
 
       Path path = file.toPath().resolve(message.getFileName());
       return processFileRequest(message.getId(), activeChatId, otherUsername, path);
     };
 
-    chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper);
+    chatManager.initObjects(chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper, chatFooter);
     chatManager.initBehaviour(onChatOpening, onChatClosing, onChatChanging, onFileRequest);
     log.info("ChatManager INITIALIZED");
   }
@@ -192,13 +204,13 @@ public class ApplicationStateManager {
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           JwtResponse jwtResponse = serverClient.processLogin(username, password);
-          if (jwtResponse.getStatus() != 200) {
-            return jwtResponse.getStatus();
+          if (!jwtResponse.isOk()) {
+            return jwtResponse.getInternalStatus();
           }
 
           DHResponse dhResponse = serverClient.getDHParams();
-          if (dhResponse.getStatus() != 200) {
-            return dhResponse.getStatus();
+          if (!dhResponse.isOk()) {
+            return dhResponse.getInternalStatus();
           }
 
           dh = new DiffieHellmanGenerator(dhResponse.getPrime(), dhResponse.getGenerator());
@@ -211,7 +223,7 @@ public class ApplicationStateManager {
           chatManager.loadChats();
           startEventCycle();
 
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -220,7 +232,7 @@ public class ApplicationStateManager {
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           NoPayloadResponse response = serverClient.processRegister(username, password);
-          return response.getStatus();
+          return response.getInternalStatus();
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -256,17 +268,17 @@ public class ApplicationStateManager {
 
     if (chatId == null || otherUsername == null) {
       log.error("Tried to desert chat when there no active chats");
-      return ChainableFuture.supplyWeaklyAsync(() -> 601);
+      return ChainableFuture.supplyWeaklyAsync(() -> ClientStatus.NOTHING_TO_PROCESS);
     }
 
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           if (!isChatAboutToDelete) {
             NoPayloadResponse response = serverClient.desertChat(chatId, otherUsername);
-            throwTransportIfStatusNotOk(response.getStatus());
+            throwTransportIfStatusNotOk(response.getInternalStatus());
           }
           chatManager.deleteChat(chatId);
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -278,17 +290,17 @@ public class ApplicationStateManager {
 
     if (chatId == null || otherUsername == null) {
       log.error("Tried to destroy chat when there no active chats");
-      return ChainableFuture.supplyWeaklyAsync(() -> 601);
+      return ChainableFuture.supplyWeaklyAsync(() -> ClientStatus.NOTHING_TO_PROCESS);
     }
 
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           if (!isChatAboutToDelete) {
             NoPayloadResponse response = serverClient.destroyChat(chatId, otherUsername);
-            throwTransportIfStatusNotOk(response.getStatus());
+            throwTransportIfStatusNotOk(response.getInternalStatus());
           }
           chatManager.deleteChat(chatId);
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -302,22 +314,18 @@ public class ApplicationStateManager {
 
   public ChainableFuture<Integer> processChatRequest(String chatId, String otherUsername,
                                                      Chat.Configuration config) {
-    if (dh == null) {
-      log.error(DIFFIE_HELLMAN_NOT_INIT_LOG);
-      return ChainableFuture.supplyWeaklyAsync(() -> 601);
-    }
-
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
+          throwIfDHUninitialised();
           BigInteger privateKey = dh.generatePrivateKey(DH_PRIVATE_KEY_BIT_LENGTH);
           BigInteger publicKey = dh.generatePublicKey(privateKey);
 
           NoPayloadResponse response = serverClient
               .requestChatConnection(chatId, otherUsername, config, publicKey.toString());
-          throwTransportIfStatusNotOk(response.getStatus());
+          throwTransportIfStatusNotOk(response.getInternalStatus());
 
           chatManager.createOrReconnectOnRequesterSide(chatId, otherUsername, config, privateKey);
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -329,13 +337,9 @@ public class ApplicationStateManager {
   }
 
   public ChainableFuture<Integer> processChatAcceptance(String chatId, String otherUsername) {
-    if (dh == null) {
-      log.error(DIFFIE_HELLMAN_NOT_INIT_LOG);
-      return ChainableFuture.supplyWeaklyAsync(() -> 601);
-    }
-
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
+          throwIfDHUninitialised();
           BigInteger privateKey = dh.generatePrivateKey(DH_PRIVATE_KEY_BIT_LENGTH);
           BigInteger publicKey = dh.generatePublicKey(privateKey);
           UnaryOperator<BigInteger> generator = otherPublicKey -> dh
@@ -343,10 +347,10 @@ public class ApplicationStateManager {
 
           NoPayloadResponse response = serverClient
               .acceptChatConnection(chatId, otherUsername, publicKey.toString());
-          throwTransportIfStatusNotOk(response.getStatus());
+          throwTransportIfStatusNotOk(response.getInternalStatus());
 
           chatManager.acceptChat(chatId, otherUsername, generator);
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -361,9 +365,9 @@ public class ApplicationStateManager {
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
           NoPayloadResponse response = serverClient.breakChatConnection(chatId, otherUsername);
-          throwTransportIfStatusNotOk(response.getStatus());
+          throwTransportIfStatusNotOk(response.getInternalStatus());
           chatManager.disconnectChat(chatId, otherUsername);
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -419,7 +423,7 @@ public class ApplicationStateManager {
             NoPayloadResponse response = serverClient
                 .sendChatMessage(messageId, chatId, otherUsername, encText, fileName);
             counter.incrementProgress();
-            return response.getStatus();
+            return response.getInternalStatus();
           }));
 
           HttpSendingProgress httpProgress = new HttpSendingProgress(counter);
@@ -429,7 +433,7 @@ public class ApplicationStateManager {
           throwTransportIfStatusNotOk(status);
 
           chatManager.completeMessage(chatId, messageId);
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -447,12 +451,12 @@ public class ApplicationStateManager {
               new MessageLoadBundle(messageId, httpProgress, counter, loadPath, filePath));
 
           NoPayloadResponse response = serverClient.requestMessageFile(messageId, chatId, otherUsername);
-          if (response.getStatus() != 200) {
+          if (!response.isOk()) {
             currentLoads.remove(messageId);
-            return response.getStatus();
+            return response.getInternalStatus();
           }
 
-          return 200;
+          return ClientStatus.OK;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -476,10 +480,10 @@ public class ApplicationStateManager {
               }
               NoPayloadResponse response = serverClient
                   .sendFilePart(messageId, chatId, otherUser, i, partCnt, part);
-              throwTransportIfStatusNotOk(response.getStatus());
+              throwTransportIfStatusNotOk(response.getInternalStatus());
               counter.incrementProgress();
             }
-            return 200;
+            return ClientStatus.OK;
           }
         })
         .thenWeaklyHandleAsync(defaultHandler);
@@ -496,6 +500,9 @@ public class ApplicationStateManager {
         boolean isOk;
         try {
           isOk = doEventCycle();
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          break;
         } catch (Exception ex) {
           log.error("Unexpected unchecked exception is threw in event cycle", ex);
           isOk = false;
@@ -516,34 +523,23 @@ public class ApplicationStateManager {
   }
 
   private boolean doEventCycle() throws Exception {
-    UserEvent rawEvent = null;
+    UserEvent rawEvent;
     try {
       UserEventWrapperResponse wrapper = serverClient.getEvent(EVENT_CYCLE_TIMEOUT);
-      if (!Thread.interrupted()) {
-        rawEvent = UserEvent.getEvent(wrapper.getEventType(), wrapper.getEventJson().getBytes());
-      }
-    } catch (JsonProcessingException ex) {
-      log.error("Event cycle failed to parse event", ex);
+      rawEvent = UserEvent.getEvent(wrapper.getEventType(), wrapper.getEventJson().getBytes());
+    } catch (ServerResponseException ex) {
+      log.error("Server response error", ex);
       return false;
     } catch (IOException ex) {
       log.error("Event cycle failed to get event", ex);
       return false;
-    } catch (InvalidServerAnswer ex) {
-      log.error("Event cycle failed to parse server answer", ex);
-      return false;
     }
 
     if (!isEventCycleWorking.get()) {
-      if (rawEvent != null) {
-        log.debug("ignored event: {}", rawEvent);
-      }
+      log.debug("ignored event: {}", rawEvent);
       return true;
     }
 
-    if (rawEvent == null) {
-      log.warn("got null event");
-      return false;
-    }
     if (rawEvent instanceof VoidEvent) {
       return true;
     }
@@ -566,15 +562,13 @@ public class ApplicationStateManager {
 
     try {
       NoPayloadResponse response = serverClient.acknowledgeEvent(rawEvent.getId());
-      if (response.getStatus() != 200) {
-        log.error("Failed to acknowledge event #{} (code {})", rawEvent.getId(), response.getStatus());
+      if (!response.isOk()) {
+        log.error("Failed to acknowledge event #{} (code {})",
+            rawEvent.getId(), response.getInternalStatus());
         return false;
       }
-    } catch (IOException ex) {
-      log.error("Failed to acknowledge event #{} (failed to connect)", rawEvent.getId(), ex);
-      return false;
-    } catch (InvalidServerAnswer ex) {
-      log.error("Failed to acknowledge event #{} (failed to parse answer)", rawEvent.getId(), ex);
+    } catch (ServerResponseException ex) {
+      log.error("Failed to acknowledge event #{}", rawEvent.getId(), ex);
       return false;
     }
 
@@ -689,7 +683,7 @@ public class ApplicationStateManager {
               log.warn("Failed to delete loaded encrypted file after decryption", ex);
             }
             chatManager.completeMessage(chatId, messageId);
-            return 200;
+            return ClientStatus.OK;
           })
           .thenWeaklyHandleAsync(getFileCancellationHandler(bundle.resultPath, "decrypting"))
           .thenWeaklyHandleAsync(getFileCancellationHandler(bundle.loadPath, "loaded encrypted"))
@@ -757,8 +751,14 @@ public class ApplicationStateManager {
   }
   
   private void throwTransportIfStatusNotOk(int status) {
-    if (status != 200) {
+    if (status != ClientStatus.OK) {
       throw new ChainTransportIntException(status);
+    }
+  }
+  
+  private void throwIfDHUninitialised() {
+    if (dh == null) {
+      throw new ModuleUninitialisedStateException("DH is uninitialised");
     }
   }
 

@@ -4,6 +4,8 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
@@ -13,6 +15,7 @@ import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.secretalk.client.application.control.ExpandableTextArea;
 import org.reminstant.secretalk.client.application.control.NotificationLabel;
 import org.reminstant.secretalk.client.model.Chat;
+import org.reminstant.secretalk.client.util.ClientStatus;
 import org.reminstant.secretalk.client.util.FxUtil;
 import org.reminstant.secretalk.client.util.StatusDescriptionHolder;
 import org.slf4j.Logger;
@@ -43,12 +46,14 @@ public class MainSceneController implements Initializable {
 
   @FXML private VBox rightBlock;
   @FXML private Label chatTitle;
+
   @FXML private StackPane chatStateBlockHolder;
   @FXML private Button chatConnectionAcceptButton;
   @FXML private Button chatConnectionRequestButton;
   @FXML private Button chatConnectionBreakButton;
-
   @FXML private ScrollPane messageHolderWrapper;
+
+  @FXML private AnchorPane chatFooter;
   @FXML private ExpandableTextArea messageInput;
 
   @FXML private HBox attachedFileBlock;
@@ -59,14 +64,14 @@ public class MainSceneController implements Initializable {
   @FXML private Pane shadow;
 
   @FXML private VBox chatCreationBlock;
-  @FXML private TextField chatCreatingUsernameField;
-  @FXML private TextField chatCreatingTitleField;
-  @FXML private ChoiceBox<String> chatCreatingAlgoChoice;
-  @FXML private ChoiceBox<String> chatCreatingModeChoice;
-  @FXML private ChoiceBox<String> chatCreatingPaddingChoice;
+  @FXML private TextField chatCreationUsernameField;
+  @FXML private TextField chatCreationTitleField;
+  @FXML private ChoiceBox<String> chatCreationAlgoChoice;
+  @FXML private ChoiceBox<String> chatCreationModeChoice;
+  @FXML private ChoiceBox<String> chatCreationPaddingChoice;
   @FXML private NotificationLabel chatCreationNotificationLabel;
-  @FXML private Button chatCreatingButton;
-  @FXML private Button chatCreatingCancelButton;
+  @FXML private Button chatCreationButton;
+  @FXML private Button chatCreationCancelButton;
 
   @FXML private VBox chatDeletionBlock;
   @FXML private Button chatSelfDeletionButton;
@@ -75,6 +80,8 @@ public class MainSceneController implements Initializable {
 
   private final FileChooser messageFileChooser;
   private File attachedFile;
+
+  private ChainableFuture<Void> lastCreationChatFuture = ChainableFuture.getCompleted();
 
 
   public MainSceneController(ApplicationStateManager sceneManager,
@@ -91,8 +98,6 @@ public class MainSceneController implements Initializable {
   @Override
   public void initialize(URL url, ResourceBundle resourceBundle) {
     chatHolder.prefWidthProperty().bind(chatHolderScroll.widthProperty().subtract(4));
-//    chatCreatingUsernameField.textProperty().addListener(_ ->
-//        chatCreatingTitleField.setText(chatCreatingUsernameField.getText()));
 
     settingsButton.setOnMouseClicked(this::onSettingsButtonClicked);
     addChatButton.setOnMouseClicked(this::onAddChatButtonClicked);
@@ -107,8 +112,10 @@ public class MainSceneController implements Initializable {
     chatConnectionBreakButton.setOnMouseClicked(this::onConnectionBreakButtonClicked);
 
     shadow.setOnMouseClicked(this::onShadowClicked);
-    chatCreatingButton.setOnMouseClicked(this::onChatCreatingButtonClicked);
-    chatCreatingCancelButton.setOnMouseClicked(this::onChatCreatingCancelButtonClicked);
+    chatCreationButton.setOnMouseClicked(this::onChatCreationButtonClicked);
+    chatCreationButton.setOnKeyReleased(this::onChatCreationButtonKeyReleased);
+    chatCreationCancelButton.setOnMouseClicked(this::onChatCreationCancelButtonClicked);
+    chatCreationCancelButton.setOnKeyReleased(this::onChatCreationCancelButtonKeyReleased);
     chatSelfDeletionButton.setOnMouseClicked(this::onChatSelfDeletionButtonClicked);
     chatDeletionButton.setOnMouseClicked(this::onChatDeletionButtonClicked);
     chatDeletionCancelButton.setOnMouseClicked(this::onChatDeletionCancelButtonClicked);
@@ -123,24 +130,25 @@ public class MainSceneController implements Initializable {
     };
 
     stateManager.initChatManager(
-        chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper,
+        chatHolder, chatTitle, chatStateBlockHolder, messageHolderWrapper, chatFooter,
         onChatOpening, onChatClosing, onChatChanging);
     log.info("MainSceneController INITIALIZED");
   }
 
 
 
-  private void openChatCreatingBlock() {
+  private void openChatCreationBlock() {
     shadow.setVisible(true);
     chatCreationBlock.setVisible(true);
   }
 
-  private void closeChatCreatingBlock() {
+  private void closeChatCreationBlock() {
     shadow.setVisible(false);
     chatCreationBlock.setVisible(false);
-    chatCreatingUsernameField.setText("");
-    chatCreatingTitleField.setText("");
+    chatCreationUsernameField.setText("");
+    chatCreationTitleField.setText("");
     chatCreationNotificationLabel.collapse();
+    lastCreationChatFuture.cancel(true);
   }
 
   private void openChatDeletionBlock() {
@@ -173,11 +181,11 @@ public class MainSceneController implements Initializable {
   private void processChatDeserting() {
     stateManager.processActiveChatDesertion()
         .thenWeaklyConsumeAsync(status -> {
-          if (status == 200) {
+          if (status == ClientStatus.OK) {
             FxUtil.runOnFxThread(this::closeChatDeletionBlock);
           } else {
             // TODO: deletion error displaying
-//            String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
+//            String desc = statusDescriptionHolder.getDescription(status, "creationChatStatus");
 //            chatCreationNotificationLabel.showError(desc);
           }
         });
@@ -186,42 +194,51 @@ public class MainSceneController implements Initializable {
   private void processChatDestroying() {
     stateManager.processActiveChatDestruction()
         .thenWeaklyConsumeAsync(status -> {
-          if (status == 200) {
+          if (status == ClientStatus.OK) {
             FxUtil.runOnFxThread(this::closeChatDeletionBlock);
           } else {
             // TODO: deletion error displaying
-//            String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
+//            String desc = statusDescriptionHolder.getDescription(status, "creationChatStatus");
 //            chatCreationNotificationLabel.showError(desc);
           }
         });
   }
 
-  private void processChatCreating() {
-    String otherUsername = chatCreatingUsernameField.getText();
-    String title = chatCreatingTitleField.getText();
-    String cryptoSystemName = chatCreatingAlgoChoice.getValue();
-    String cipherMode = chatCreatingModeChoice.getValue();
-    String paddingMode = chatCreatingPaddingChoice.getValue();
+  private void processChatCreation() {
+    String otherUsername = chatCreationUsernameField.getText();
+    String title = chatCreationTitleField.getText();
+    String cryptoSystemName = chatCreationAlgoChoice.getValue();
+    String cipherMode = chatCreationModeChoice.getValue();
+    String paddingMode = chatCreationPaddingChoice.getValue();
     Chat.Configuration config = new Chat.Configuration(title, cryptoSystemName, cipherMode, paddingMode);
 
-    stateManager.processChatCreation(otherUsername, config)
+    chatCreationButton.setDisable(true);
+
+    lastCreationChatFuture = stateManager.processChatCreation(otherUsername, config)
         .thenWeaklyConsumeAsync(status -> {
-          if (status == 200) {
-            FxUtil.runOnFxThread(this::closeChatCreatingBlock);
+          if (status == ClientStatus.OK) {
+            FxUtil.runOnFxThread(this::closeChatCreationBlock);
           } else {
             FxUtil.runOnFxThread(() -> {
-              String desc = statusDescriptionHolder.getDescription(status, "creatingChatStatus");
+              String desc = statusDescriptionHolder.getDescription(status, "creationChatStatus");
               chatCreationNotificationLabel.showError(desc);
             });
           }
+          chatCreationButton.setDisable(false);
+        });
+
+    lastCreationChatFuture
+        .thenWeaklyHandleAsync(_ -> {
+          chatCreationButton.setDisable(false);
+          return null;
         });
   }
 
   private void processActiveChatAcceptance() {
     stateManager.processActiveChatAcceptance()
         .thenWeaklyConsumeAsync(status -> {
-          if (status != 200) {
-            log.error("Failed to accept chat");
+          if (status != ClientStatus.OK) {
+            log.error("Failed to accept chat connection");
           }
         });
   }
@@ -229,8 +246,8 @@ public class MainSceneController implements Initializable {
   private void processActiveChatRequest() {
     stateManager.processActiveChatRequest()
         .thenWeaklyConsumeAsync(status -> {
-          if (status != 200) {
-            log.error("Failed to accept chat");
+          if (status != ClientStatus.OK) {
+            log.error("Failed to request chat connection");
           }
         });
   }
@@ -238,8 +255,8 @@ public class MainSceneController implements Initializable {
   private void processActiveChatDisconnection() {
     stateManager.processActiveChatDisconnection()
         .thenWeaklyConsumeAsync(status -> {
-          if (status != 200) {
-            log.error("Failed to accept chat");
+          if (status != ClientStatus.OK) {
+            log.error("Failed to break chat connection");
           }
         });
   }
@@ -263,7 +280,7 @@ public class MainSceneController implements Initializable {
 
     stateManager.processSendingMessage(messageText, messageFile);
 //        .thenWeaklyConsumeAsync(status -> {
-//          if (status == 200) {
+//          if (status == ClientStatus.OK) {
 //            FxUtil.runOnFxThread(() -> {
 //              messageInput.clear();
 ////              ConcurrentUtil.sleepSafely(100);
@@ -285,7 +302,7 @@ public class MainSceneController implements Initializable {
 
   private void onAddChatButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
-      openChatCreatingBlock();
+      openChatCreationBlock();
     }
   }
 
@@ -297,20 +314,32 @@ public class MainSceneController implements Initializable {
 
   private void onShadowClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
-      closeChatCreatingBlock();
+      closeChatCreationBlock();
       closeChatDeletionBlock();
     }
   }
 
-  private void onChatCreatingButtonClicked(MouseEvent e) {
+  private void onChatCreationButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
-      processChatCreating();
+      processChatCreation();
     }
   }
 
-  private void onChatCreatingCancelButtonClicked(MouseEvent e) {
+  private void onChatCreationButtonKeyReleased(KeyEvent e) {
+    if (e.getCode().equals(KeyCode.ENTER)) {
+      processChatCreation();
+    }
+  }
+
+  private void onChatCreationCancelButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
-      closeChatCreatingBlock();
+      closeChatCreationBlock();
+    }
+  }
+
+  private void onChatCreationCancelButtonKeyReleased(KeyEvent e) {
+    if (e.getCode().equals(KeyCode.ENTER)) {
+      closeChatCreationBlock();
     }
   }
 

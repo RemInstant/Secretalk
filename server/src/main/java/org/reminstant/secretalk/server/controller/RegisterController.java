@@ -1,18 +1,19 @@
 package org.reminstant.secretalk.server.controller;
 
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.reminstant.secretalk.server.exception.InvalidCredentials;
+import org.reminstant.secretalk.server.dto.http.StatusWrapper;
+import org.reminstant.secretalk.server.dto.http.RegisterData;
+import org.reminstant.secretalk.server.exception.ConstraintViolationException;
+import org.reminstant.secretalk.server.exception.InvalidPasswordException;
+import org.reminstant.secretalk.server.exception.InvalidUsernameException;
 import org.reminstant.secretalk.server.exception.OccupiedUsername;
 import org.reminstant.secretalk.server.service.AppUserService;
+import org.reminstant.secretalk.server.util.InternalStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -25,28 +26,23 @@ public class RegisterController {
   }
 
   @PostMapping(value = "${api.register}", consumes = MediaType.APPLICATION_JSON_VALUE)
-  public ResponseEntity<String> register(@RequestBody Map<String, String> data, Principal principal) {
-    String username = data.getOrDefault("username", null);
-    String password = data.getOrDefault("password", null);
-    int status;
+  public ResponseEntity<StatusWrapper> register(@RequestBody RegisterData data) {
+    int status = InternalStatus.OK;
 
-    if (principal != null) {
-      status = HttpServletResponse.SC_BAD_REQUEST;
-    } else {
-      try {
-        appUserService.registerUser(username, password);
-        status = HttpServletResponse.SC_OK;
-      } catch (OccupiedUsername e) {
-        status = HttpServletResponse.SC_BAD_REQUEST;
-      } catch (InvalidCredentials e) {
-        status = HttpServletResponse.SC_BAD_REQUEST;
-      }
+    try {
+      appUserService.registerUser(data.username(), data.password());
+    } catch (OccupiedUsername _) {
+      status = InternalStatus.OCCUPIED_USERNAME;
+    } catch (InvalidUsernameException _) {
+      status = InternalStatus.INVALID_USERNAME;
+    } catch (InvalidPasswordException _) {
+      status = InternalStatus.INVALID_PASSWORD;
+    } catch (ConstraintViolationException _) {
+      status = InternalStatus.INVALID_CREDENTIALS;
     }
 
-    // TODO: custom statuses
-
-    return ResponseEntity.status(status)
+    return ResponseEntity.status(InternalStatus.toHttpStatus(status))
         .contentType(MediaType.APPLICATION_JSON)
-        .build();
+        .body(new StatusWrapper(status));
   }
 }

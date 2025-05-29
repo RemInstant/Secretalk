@@ -59,4 +59,8 @@ public class AppUserService implements UserDetailsService {
     String encryptedPassword = new BCryptPasswordEncoder().encode(password);
     appUserRepository.save(new AppUser(username, encryptedPassword));
   }
+
+  public boolean isUserExistent(String username) {
+    return appUserRepository.getAppUserByUsername(username).isPresent();
+  }
 }
