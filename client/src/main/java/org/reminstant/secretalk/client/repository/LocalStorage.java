@@ -15,10 +15,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +23,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Stream;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.nio.file.StandardOpenOption.*;
 
 @Slf4j
@@ -41,8 +39,9 @@ public class LocalStorage {
   private static final int MESSAGE_ID_BYTE_LENGTH = 36;
   private static final int AUTHOR_BYTE_LENGTH = 32;
   private static final int STRING_LOCATION_BYTE_LENGTH = 12;
-  private static final int MESSAGE_CONFIG_LENGTH = 106;
+  private static final int MESSAGE_CONFIG_LENGTH = 107;
   private static final int MAX_DYNAMIC_STRING_LENGTH = 4096;
+  private static final int MAX_RESOURCE_SIZE = 1 << 20;
 
   private final Map<String, ReadWriteLock> chatLocks;
   private final Map<String, Long> messageConfigPositions;
@@ -74,15 +73,85 @@ public class LocalStorage {
     this.username = null;
   }
 
-  public Path createTmpFile(String prefix, String postfix) throws LocalStorageTmpFileException {
+
+  public byte[] readAsBytes(Path path) throws LocalStorageReadException {
+    try {
+      long size = Files.size(path);
+      if (size > 2 * MAX_RESOURCE_SIZE) {
+        throw new IOException("File is to big");
+      }
+      return Files.readAllBytes(path);
+    } catch (IOException ex) {
+      throw new LocalStorageReadException("Failed to read data from the local storage", ex);
+    }
+  }
+
+  public void writeToFile(Path path, byte[] bytes) throws LocalStorageWriteException {
+    try {
+      Files.write(path, bytes);
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to write data to the local storage", ex);
+    }
+  }
+
+  public void copyToFile(Path pathSrc, Path pathDest) throws LocalStorageWriteException {
+    try {
+      Files.copy(pathSrc, pathDest, REPLACE_EXISTING);
+    } catch (IOException ex) {
+      throw new LocalStorageWriteException("Failed to copy data in the local storage", ex);
+    }
+  }
+
+
+
+  public Path createTmpFile(String prefix, String postfix) throws LocalStorageCreationException {
     throwIfUninitialised();
     try {
       Path tmpDirPath = getTmpPath();
       createDirectoryIfNotExist(tmpDirPath);
       return Files.createTempFile(tmpDirPath, prefix, postfix);
     } catch (IOException ex) {
-      throw new LocalStorageTmpFileException("Failed to create tmp file", ex);
+      throw new LocalStorageCreationException("Failed to create tmp file", ex);
     }
+  }
+
+  public void deleteTmpFile(String name) throws LocalStorageDeletionException {
+    throwIfUninitialised();
+    try {
+      Path tmpDirPath = getTmpPath();
+      createDirectoryIfNotExist(tmpDirPath);
+      Files.deleteIfExists(tmpDirPath.resolve(name));
+    } catch (IOException ex) {
+      throw new LocalStorageDeletionException("Failed to delete tmp file", ex);
+    }
+  }
+
+  public Path createResourceFile(String name) throws LocalStorageCreationException {
+    throwIfUninitialised();
+    try {
+//      if
+//      Files.size(path) MAX_RESOURCE_SIZE
+
+      Path resourceDirPath = getResourcePath();
+      createDirectoryIfNotExist(resourceDirPath);
+      Path resultPath = resourceDirPath.resolve(name);
+      return Files.createFile(resultPath);
+    } catch (IOException ex) {
+      throw new LocalStorageCreationException("Failed to create resource file", ex);
+    }
+  }
+
+  public Path getResourceFile(String name) throws LocalStorageExistenceException {
+    throwIfUninitialised();
+
+    Path resourceDirPath = getResourcePath();
+    Path resultPath = resourceDirPath.resolve(name);
+
+    if (!Files.exists(resourceDirPath) || !Files.exists(resultPath)) {
+      throw new LocalStorageExistenceException("Resource file %s does not exist".formatted(name));
+    }
+
+    return resultPath;
   }
 
 
@@ -416,7 +485,7 @@ public class LocalStorage {
       byte[] msgIdBuffer = message.getId().getBytes();
       byte[] authorBuffer = message.getAuthor().getBytes();
       byte[] locBuffer = new byte[36];
-      byte[] stateBuffer = new byte[2];
+      byte[] stateBuffer = new byte[3];
 
       Bits.unpackLongToBigEndian(textLoc.begin(), locBuffer, 0);
       Bits.unpackIntToBigEndian(textLoc.length(), locBuffer, 8);
@@ -426,6 +495,7 @@ public class LocalStorage {
       Bits.unpackIntToBigEndian(filePathLoc.length(), locBuffer, 32);
       stateBuffer[0] = (byte) (message.isBelongedToReceiver() ? 1 : 0);
       stateBuffer[1] = (byte) (message.getState().ordinal());
+      stateBuffer[2] = (byte) (message.isImage() ? 1 : 0);
 
       if (msgIdBuffer.length != MESSAGE_ID_BYTE_LENGTH) {
         msgIdBuffer = Arrays.copyOf(msgIdBuffer, MESSAGE_ID_BYTE_LENGTH);
@@ -534,7 +604,7 @@ public class LocalStorage {
     byte[] msgIdBuffer = new byte[MESSAGE_ID_BYTE_LENGTH];
     byte[] authorBuffer = new byte[AUTHOR_BYTE_LENGTH];
     byte[] locBuffer = new byte[36];
-    byte[] stateBuffer = new byte[2];
+    byte[] stateBuffer = new byte[3];
 
     staticDataChannel.position(pos);
     staticDataChannel.read(ByteBuffer.wrap(msgIdBuffer));
@@ -552,6 +622,7 @@ public class LocalStorage {
     int filePathLength = Bits.packBigEndianToInt(locBuffer, 32);
     boolean isBelongedToReceiver = stateBuffer[0] == 1;
     Message.State state = Message.State.values()[stateBuffer[1]];
+    boolean isImage = stateBuffer[2] == 1;
 
     if (textLength > MAX_DYNAMIC_STRING_LENGTH ||
         fileNameLength > MAX_DYNAMIC_STRING_LENGTH ||
@@ -569,7 +640,7 @@ public class LocalStorage {
       filePath = Path.of(readDataString(dynamicDataChannel, new FileLocation(filePathBegin, filePathLength)));
     }
 
-    return new Message(msgId, text, author, fileName, isBelongedToReceiver, filePath, state);
+    return new Message(msgId, text, author, fileName, isBelongedToReceiver, filePath, isImage, state);
   }
 
 
@@ -594,6 +665,10 @@ public class LocalStorage {
 
   private Path getTmpPath() {
     return getAppPath().resolve("tmp");
+  }
+
+  private Path getResourcePath() {
+    return getAppPath().resolve("res");
   }
 
   private Path getUserFolderPath() {

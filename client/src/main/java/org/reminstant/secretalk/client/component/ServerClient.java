@@ -193,27 +193,57 @@ public class ServerClient {
   }
 
   public NoPayloadResponse sendChatMessage(String messageId, String chatId, String otherUsername,
-                                           byte[] messageData, String attachedFileName)
+                                           byte[] messageData)
       throws ServerConnectionException, ServerResponseException, InterruptedException {
-    Map<String, Object> data;
-    if (attachedFileName == null) {
-      data = Map.of(
-          "messageId", messageId,
-          "chatId", chatId,
-          "otherUsername", otherUsername,
-          "messageData", messageData);
-    } else {
-      data = Map.of(
-          "messageId", messageId,
-          "chatId", chatId,
-          "otherUsername", otherUsername,
-          "messageData", messageData,
-          "attachedFileName", attachedFileName);
-    }
+    Map<String, Object> data = Map.of(
+        "messageId", messageId,
+        "chatId", chatId,
+        "otherUsername", otherUsername,
+        "messageData", messageData,
+        "isImage", false);
     String json = jsonifyMap(data);
 
     return sendRequest(HttpRequest.newBuilder()
         .uri(URI.create("http://localhost:8080/api/chat/send-chat-message"))
+        .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
+        .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
+        .POST(HttpRequest.BodyPublishers.ofString(json))
+        .build(), data, UserEventWrapperResponse.class);
+  }
+
+  public NoPayloadResponse sendChatMessage(String messageId, String chatId, String otherUsername,
+                                           byte[] messageData, String attachedFileName, boolean isImage)
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
+    Map<String, Object> data = Map.of(
+        "messageId", messageId,
+        "chatId", chatId,
+        "otherUsername", otherUsername,
+        "messageData", messageData,
+        "attachedFileName", attachedFileName,
+        "isImage", isImage);
+    String json = jsonifyMap(data);
+
+    return sendRequest(HttpRequest.newBuilder()
+        .uri(URI.create("http://localhost:8080/api/chat/send-chat-message"))
+        .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
+        .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
+        .POST(HttpRequest.BodyPublishers.ofString(json))
+        .build(), data, UserEventWrapperResponse.class);
+  }
+
+  public NoPayloadResponse sendImage(String messageId, String chatId, String otherUsername,
+                                     String fileName, byte[] fileData)
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
+    Map<String, Object> data = Map.of(
+        "messageId", messageId,
+        "chatId", chatId,
+        "otherUsername", otherUsername,
+        "fileName", fileName,
+        "imageData", fileData);
+    String json = jsonifyMap(data);
+
+    return sendRequest(HttpRequest.newBuilder()
+        .uri(URI.create("http://localhost:8080/api/chat/send-image"))
         .header(AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_BEARER + jwtToken)
         .header(CONTENT_TYPE_HEADER, CONTENT_TYPE_HEADER_APPLICATION_JSON)
         .POST(HttpRequest.BodyPublishers.ofString(json))

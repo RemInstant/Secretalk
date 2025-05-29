@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.rgielen.fxweaver.core.FxWeaver;
 import org.reminstant.concurrent.ChainExecutionException;
 import org.reminstant.concurrent.Progress;
+import org.reminstant.concurrent.functions.ThrowingSupplier;
 import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.ConcurrentUtil;
@@ -39,6 +40,7 @@ import org.reminstant.secretalk.client.util.ClientStatus;
 import org.reminstant.secretalk.client.util.FxUtil;
 import org.springframework.stereotype.Component;
 
+import java.beans.Visibility;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -126,9 +128,13 @@ public class ApplicationStateManager {
           log.error("Failed to write data into the local storage", ex);
           yield ClientStatus.STORAGE_WRITE_FAILURE;
         }
-        case LocalStorageTmpFileException ex -> {
-          log.error("Failed to create tmp file in the local storage", ex);
-          yield ClientStatus.STORAGE_TMP_CREATION_FAILURE;
+        case LocalStorageExistenceException ex -> {
+          log.error("Failed to find file in the local storage", ex);
+          yield ClientStatus.STORAGE_EXISTENCE_ERROR;
+        }
+        case LocalStorageCreationException ex -> {
+          log.error("Failed to create file in the local storage", ex);
+          yield ClientStatus.STORAGE_CREATION_FAILURE;
         }
         case LocalStorageDeletionException ex -> {
           log.error("Failed to delete file in the local storage", ex);
@@ -372,17 +378,15 @@ public class ApplicationStateManager {
         .thenWeaklyHandleAsync(defaultHandler);
   }
 
-  public ChainableFuture<Integer> processSendingMessage(String messageText, File file) {
+  public ChainableFuture<Integer> processSendingMessage(String messageText) {
     String chatId = chatManager.getActiveChatId();
     String otherUsername = chatManager.getChatOtherUsername(chatId);
     SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(chatId);
 
     byte[] data = messageText.getBytes();
     String messageId = UUID.randomUUID().toString();
-    Path filePath = file != null ? file.toPath() : null;
-    String fileName = file != null ? file.getName() : null;
-    Message message = new Message(
-        messageId, messageText, serverClient.getUsername(), fileName, true, filePath);
+    Message message = new Message(messageId, messageText, serverClient.getUsername(),
+        null, false, true);
 
     return ChainableFuture
         .supplyWeaklyAsync(() -> {
@@ -391,42 +395,8 @@ public class ApplicationStateManager {
           chatManager.startMessageEncryption(chatId, messageId, textProgress, false);
           byte[] encText = textProgress.getResult();
 
-          Path encTmpFilePath;
-          if (file != null) {
-            encTmpFilePath = localStorage.createTmpFile(fileName, "enc");
-            String in = file.getPath();
-            String out = encTmpFilePath.toString();
-            CryptoProgress<Void> fileProgress = cryptoContext.encryptAsync(in, out);
-            fileProgress.getFuture()
-                .thenWeaklyHandleAsync(getFileCancellationHandler(encTmpFilePath, "encrypting"));
-
-            chatManager.startMessageEncryption(chatId, messageId, fileProgress, true);
-            fileProgress.getResult();
-          } else {
-            encTmpFilePath = null;
-          }
-
-          Thread.sleep(100);
-
-          if (file != null) {
-            HttpSendingProgress httpProgress = processSendingFilePartly(
-                messageId, chatId, otherUsername, encTmpFilePath);
-            chatManager.startMessageUpload(chatId, messageId, httpProgress, true);
-            int status = httpProgress.getResult();
-            throwTransportIfStatusNotOk(status);
-            Thread.sleep(500); // cancel gap
-          }
-
-          HttpSendingProgress.Counter counter = new HttpSendingProgress.Counter();
-          counter.setFuture(ChainableFuture.supplyWeaklyAsync(() -> {
-            counter.setSubTaskCount(1);
-            NoPayloadResponse response = serverClient
-                .sendChatMessage(messageId, chatId, otherUsername, encText, fileName);
-            counter.incrementProgress();
-            return response.getInternalStatus();
-          }));
-
-          HttpSendingProgress httpProgress = new HttpSendingProgress(counter);
+          HttpSendingProgress httpProgress = wrapSendingHttp(() -> serverClient
+              .sendChatMessage(messageId, chatId, otherUsername, encText));
           chatManager.startMessageUpload(chatId, messageId, httpProgress, false);
 
           int status = httpProgress.getResult();
@@ -434,6 +404,82 @@ public class ApplicationStateManager {
 
           chatManager.completeMessage(chatId, messageId);
           return ClientStatus.OK;
+        })
+        .thenWeaklyHandleAsync(ex -> {
+          chatManager.failMessage(chatId, messageId);
+          throw ex;
+        })
+        .thenWeaklyHandleAsync(defaultHandler);
+  }
+
+  public ChainableFuture<Integer> processSendingMessage(String messageText, Path filePath, boolean isImage) {
+    String chatId = chatManager.getActiveChatId();
+    String otherUsername = chatManager.getChatOtherUsername(chatId);
+    SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(chatId);
+
+    byte[] data = messageText.getBytes();
+    String messageId = UUID.randomUUID().toString();
+
+    return ChainableFuture
+        .supplyWeaklyAsync(() -> {
+          Path resPath = filePath;
+          String fileName = filePath.getFileName().toString();
+          if (isImage) {
+            fileName = messageId + "." + getFileExtension(fileName);
+            resPath = localStorage.createResourceFile(fileName);
+            localStorage.copyToFile(filePath, resPath);
+          }
+
+          String outFileName = (isImage ? "load" : "") + fileName;
+
+          Message message = new Message(messageId, messageText, serverClient.getUsername(),
+              fileName, true, resPath, isImage);
+
+          chatManager.insertMessage(chatId, message, false);
+          CryptoProgress<byte[]> textProgress = cryptoContext.encryptAsync(data);
+          chatManager.startMessageEncryption(chatId, messageId, textProgress, false);
+          byte[] encText = textProgress.getResult();
+
+          Path encTmpFilePath = localStorage.createTmpFile(fileName, "enc");
+          String in = resPath.toString();
+          String out = encTmpFilePath.toString();
+          CryptoProgress<Void> fileProgress = cryptoContext.encryptAsync(in, out);
+          fileProgress.getFuture()
+              .thenWeaklyHandleAsync(getFileCancellationHandler(encTmpFilePath, "encrypting"));
+
+          chatManager.startMessageEncryption(chatId, messageId, fileProgress, true);
+          fileProgress.getResult();
+
+          Thread.sleep(100);
+
+          HttpSendingProgress httpProgress;
+          if (isImage) {
+            byte[] encData = localStorage.readAsBytes(encTmpFilePath);
+            localStorage.deleteTmpFile(encTmpFilePath.getFileName().toString());
+            httpProgress = wrapSendingHttp(() ->
+                serverClient.sendImage(messageId, chatId, otherUsername, outFileName, encData));
+          } else {
+            httpProgress = processSendingFilePartly(messageId, chatId, otherUsername, encTmpFilePath);
+          }
+
+          chatManager.startMessageUpload(chatId, messageId, httpProgress, true);
+          int status = httpProgress.getResult();
+          throwTransportIfStatusNotOk(status);
+          Thread.sleep(500); // cancel gap
+
+          httpProgress = wrapSendingHttp(() -> serverClient
+              .sendChatMessage(messageId, chatId, otherUsername, encText, outFileName, isImage));
+          chatManager.startMessageUpload(chatId, messageId, httpProgress, false);
+
+          status = httpProgress.getResult();
+          throwTransportIfStatusNotOk(status);
+
+          chatManager.completeMessage(chatId, messageId);
+          return ClientStatus.OK;
+        })
+        .thenWeaklyHandleAsync(ex -> {
+          chatManager.failMessage(chatId, messageId);
+          throw ex;
         })
         .thenWeaklyHandleAsync(defaultHandler);
   }
@@ -553,6 +599,7 @@ public class ApplicationStateManager {
         case ChatConnectionAcceptEvent e -> handleChatConnectionAcceptEvent(e);
         case ChatConnectionBreakEvent e -> handleChatConnectionBreakEvent(e);
         case ChatMessageEvent e -> handleChatMessageEvent(e);
+        case ChatImageEvent e -> handleChatImageEvent(e);
         case ChatFileEvent e -> handleChatFileEvent(e);
         default -> { } // NOSONAR
       }
@@ -609,19 +656,37 @@ public class ApplicationStateManager {
     chatManager.disconnectChat(event.getChatId(), event.getSenderUsername());
   }
 
-  private void handleChatMessageEvent(ChatMessageEvent event) throws LocalStorageWriteException {
+  private void handleChatMessageEvent(ChatMessageEvent event)
+      throws LocalStorageWriteException, LocalStorageExistenceException {
     String chatId = event.getChatId();
+    String messageId = event.getMessageId();
+    Path filePath = null;
+
+    if (event.getAttachedFileName() != null && event.isImage()) {
+      filePath = localStorage.getResourceFile(event.getAttachedFileName());
+    }
+
     SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(event.getChatId());
     String text = new String(cryptoContext.decrypt(event.getMessageData()));
-    Message message = new Message(event.getMessageId(), text,
-        event.getSenderUsername(), event.getAttachedFileName(), false);
+
+    Message message = new Message(messageId, text, event.getSenderUsername(),
+        event.getAttachedFileName(), false, filePath, event.isImage());
 
     chatManager.insertMessage(event.getChatId(), message, false);
-    if (event.getAttachedFileName() == null) {
+    if (event.getAttachedFileName() == null || event.isImage()) {
       chatManager.completeMessage(chatId, message.getId());
     } else {
       chatManager.startMessageRequesting(chatId, message.getId());
     }
+  }
+
+  private void handleChatImageEvent(ChatImageEvent event)
+      throws LocalStorageWriteException, LocalStorageCreationException {
+    SymmetricCryptoContext cryptoContext = chatManager.getChatCryptoContext(event.getChatId());
+    byte[] decryptedData = cryptoContext.decrypt(event.getImageData());
+
+    Path resPath = localStorage.createResourceFile(event.getFileName());
+    localStorage.writeToFile(resPath, decryptedData);
   }
 
   private void handleChatFileEvent(ChatFileEvent event) throws LocalStorageWriteException {
@@ -719,7 +784,7 @@ public class ApplicationStateManager {
 
     FxUtil.runOnFxThread(() -> {
       stage.setScene(mainScene);
-      stage.setMinWidth(460.0);
+      stage.setMinWidth(500.0);
       stage.setMinHeight(300.0);
       stage.setResizable(true);
       stage.show();
@@ -749,7 +814,25 @@ public class ApplicationStateManager {
       throw originEx;
     };
   }
-  
+
+
+  private HttpSendingProgress wrapSendingHttp(ThrowingSupplier<NoPayloadResponse> httpAction) {
+    HttpSendingProgress.Counter counter = new HttpSendingProgress.Counter();
+    counter.setFuture(ChainableFuture.supplyWeaklyAsync(() -> {
+      counter.setSubTaskCount(1);
+      NoPayloadResponse response = httpAction.get();
+      counter.incrementProgress();
+      return response.getInternalStatus();
+    }));
+
+    return new HttpSendingProgress(counter);
+  }
+
+  private String getFileExtension(String fileName) {
+    int dotIndex = fileName.lastIndexOf('.');
+    return fileName.substring(dotIndex + 1);
+  }
+
   private void throwTransportIfStatusNotOk(int status) {
     if (status != ClientStatus.OK) {
       throw new ChainTransportIntException(status);

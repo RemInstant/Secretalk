@@ -18,8 +18,8 @@ public class ClientStatus {
   public static final int STORAGE_FAILURE = 605000;
   public static final int STORAGE_READ_FAILURE = 605001;
   public static final int STORAGE_WRITE_FAILURE = 605002;
-  public static final int STORAGE_CREATION_FAILURE = 605003;
-  public static final int STORAGE_TMP_CREATION_FAILURE = 605004;
+  public static final int STORAGE_EXISTENCE_ERROR = 605003;
+  public static final int STORAGE_CREATION_FAILURE = 605004;
   public static final int STORAGE_DELETION_FAILURE = 605005;
 
   private ClientStatus() {

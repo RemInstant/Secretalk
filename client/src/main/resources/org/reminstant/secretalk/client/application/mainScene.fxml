@@ -64,8 +64,8 @@
             </StackPane>
             <ScrollPane fx:id="messageHolderWrapper" VBox.vgrow="ALWAYS"/> <!--filled programmatically-->
             <HBox fx:id="attachedFileBlock">
-                <Label>Файл:</Label>
-                <Label fx:id="attachedFileLabel">MEOWMEOWMEOWMEOWMEOW.png</Label>
+                <Label fx:id="attachedFileTypeLabel"></Label>
+                <Label fx:id="attachedFileLabel"></Label>
                 <Pane HBox.hgrow="ALWAYS"/>
                 <Label fx:id="attachedFileCancelLabel">x</Label>
             </HBox>
@@ -73,9 +73,12 @@
                 <ImageView fx:id="attachFileButton" styleClass="buttonImage" AnchorPane.leftAnchor="8" AnchorPane.bottomAnchor="7">
                     <Image url="@../icons/filled/attachIcon32x32.png"/>
                 </ImageView>
+                <ImageView fx:id="attachImageButton" styleClass="buttonImage" AnchorPane.leftAnchor="45" AnchorPane.bottomAnchor="7">
+                    <Image url="@../icons/filled/attachImageIcon32x32.png"/>
+                </ImageView>
                 <ExpandableTextArea fx:id="messageInput"
                                     focusTraversable="false"
-                                    AnchorPane.leftAnchor="50" AnchorPane.rightAnchor="50"
+                                    AnchorPane.leftAnchor="85" AnchorPane.rightAnchor="50"
                                     AnchorPane.topAnchor="4" AnchorPane.bottomAnchor="8"
                                     promptText="Сообщение..."/>
                 <ImageView fx:id="sendButton" styleClass="buttonImage" AnchorPane.rightAnchor="8" AnchorPane.bottomAnchor="7">

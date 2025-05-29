@@ -31,26 +31,29 @@ public class Message {
   private final boolean belongedToReceiver;
   @Setter
   private Path filePath;
+  private final boolean isImage;
   @Setter
   private State state;
 
-  public Message(String id, String text, String author, String fileName, boolean belongedToReceiver) {
-    this(id, text, author, fileName, belongedToReceiver, null, State.NEW);
+  public Message(String id, String text, String author, String fileName,
+                 boolean isImage, boolean belongedToReceiver) {
+    this(id, text, author, fileName, belongedToReceiver, null, false, State.NEW);
   }
 
   public Message(String id, String text, String author, String fileName,
-                 boolean belongedToReceiver, Path filePath) {
-    this(id, text, author, fileName, belongedToReceiver, filePath, State.NEW);
+                 boolean belongedToReceiver, Path filePath, boolean isImage) {
+    this(id, text, author, fileName, belongedToReceiver, filePath, isImage, State.NEW);
   }
 
   public Message(String id, String text, String author, String fileName,
-                 boolean belongedToReceiver, Path filePath, State state) {
+                 boolean belongedToReceiver, Path filePath, boolean isImage, State state) {
     this.id = id;
     this.text = text;
     this.author = author;
     this.fileName = fileName;
     this.belongedToReceiver = belongedToReceiver;
     this.filePath = filePath;
+    this.isImage = isImage;
     this.state = state;
   }
 }

@@ -8,7 +8,8 @@ public record ChatMessageData(
     String chatId,
     String otherUsername,
     byte[] messageData,
-    String attachedFileName) {
+    String attachedFileName,
+    boolean isImage) {
 
   @SuppressWarnings("DeconstructionCanBeUsed")
   @Override
@@ -18,7 +19,8 @@ public record ChatMessageData(
         Objects.equals(chatId, data.chatId) &&
         Objects.equals(otherUsername, data.otherUsername) &&
         Arrays.equals(messageData, data.messageData) &&
-        Objects.equals(attachedFileName, data.attachedFileName);
+        Objects.equals(attachedFileName, data.attachedFileName) &&
+        Objects.equals(isImage, data.isImage);
   }
 
   @Override
@@ -28,6 +30,7 @@ public record ChatMessageData(
     result = 31 * result + Objects.hashCode(otherUsername);
     result = 31 * result + Arrays.hashCode(messageData);
     result = 31 * result + Objects.hashCode(attachedFileName);
+    result = 31 * result + Objects.hashCode(isImage);
     return result;
   }
 
@@ -39,6 +42,7 @@ public record ChatMessageData(
         ", otherUsername='" + otherUsername + '\'' +
         ", messageData=" + Arrays.toString(messageData) +
         ", attachedFileName='" + attachedFileName + '\'' +
+        ", isImage='" + isImage + '\'' +
         '}';
   }
 }

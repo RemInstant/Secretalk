@@ -290,7 +290,42 @@ public class EventController {
 
     try {
       nats.sendChatMessage(data.messageId(), data.chatId(), principal.getName(),
-          data.otherUsername(), data.messageData(), data.attachedFileName());
+          data.otherUsername(), data.messageData(), data.attachedFileName(), data.isImage());
+    } catch (Exception ex) {
+      log.error("Failed to send NATS event", ex); // NOSONAR
+      return ResponseEntity
+          .status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .contentType(MediaType.APPLICATION_JSON)
+          .build();
+    }
+
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .build();
+  }
+
+  @PostMapping("${api.send-image}")
+  ResponseEntity<StatusWrapper> sendImage(HttpServletRequest request,
+                                          @RequestBody ChatImageData data,
+                                          Principal principal) {
+    logDebugHttpRequest(request, principal, data);
+    if (!userService.isUserExistent(data.otherUsername())) {
+      return nonExistentUserResponse;
+    }
+    if (principal.getName().equals(data.otherUsername())) {
+      return selfRequestResponse;
+    }
+
+    if (data.imageData().length > 512 * (1 << 10)) {
+      // TODO: constant, status
+      return ResponseEntity.badRequest()
+          .contentType(MediaType.APPLICATION_JSON)
+          .build();
+    }
+
+    try {
+      nats.sendImage(data.messageId(), data.chatId(), principal.getName(),
+          data.otherUsername(), data.fileName(), data.imageData());
     } catch (Exception ex) {
       log.error("Failed to send NATS event", ex); // NOSONAR
       return ResponseEntity

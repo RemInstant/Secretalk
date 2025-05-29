@@ -14,9 +14,10 @@ public class ChatMessageEvent extends UserEvent {
   private final String senderUsername;
   private final byte[] messageData;
   private final String attachedFileName;
+  private final boolean image;
 
   ChatMessageEvent(String id, String messageId, String chatId, String senderUsername,
-                          byte[] messageData, String attachedFileName) {
+                          byte[] messageData, String attachedFileName, boolean image) {
     super(id);
     Objects.requireNonNull(messageId, "messageId cannot be null");
     Objects.requireNonNull(chatId, "chatId cannot be null");
@@ -27,9 +28,10 @@ public class ChatMessageEvent extends UserEvent {
     this.senderUsername = senderUsername;
     this.messageData = messageData;
     this.attachedFileName = attachedFileName;
+    this.image = image;
   }
 
   ChatMessageEvent() {
-    this("", "", "", "", new byte[0], null);
+    this("", "", "", "", new byte[0], null, false);
   }
 }

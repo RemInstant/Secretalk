@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.ResourceBundle;
 
 @Component
@@ -38,6 +39,7 @@ public class MainSceneController implements Initializable {
   @FXML private ImageView settingsButton;
   @FXML private ImageView addChatButton;
   @FXML private ImageView deleteChatButton;
+  @FXML private ImageView attachImageButton;
   @FXML private ImageView attachFileButton;
   @FXML private ImageView sendButton;
 
@@ -57,6 +59,7 @@ public class MainSceneController implements Initializable {
   @FXML private ExpandableTextArea messageInput;
 
   @FXML private HBox attachedFileBlock;
+  @FXML private Label attachedFileTypeLabel;
   @FXML private Label attachedFileLabel;
   @FXML private Label attachedFileCancelLabel;
 
@@ -79,7 +82,9 @@ public class MainSceneController implements Initializable {
   @FXML private Button chatDeletionCancelButton;
 
   private final FileChooser messageFileChooser;
-  private File attachedFile;
+  private final FileChooser messageImageChooser;
+  private Path attachedFile;
+  private boolean isImageFileAttached;
 
   private ChainableFuture<Void> lastCreationChatFuture = ChainableFuture.getCompleted();
 
@@ -90,7 +95,15 @@ public class MainSceneController implements Initializable {
     this.statusDescriptionHolder = statusDescriptionHolder;
 
     this.messageFileChooser = new FileChooser();
+    this.messageImageChooser = new FileChooser();
     this.attachedFile = null;
+    this.isImageFileAttached = false;
+
+    FileChooser.ExtensionFilter imageFilter =
+        new FileChooser.ExtensionFilter("Images (*.jpg, *.png)", "*.jpg", "*.png");
+
+    messageImageChooser.getExtensionFilters().add(imageFilter);
+    messageImageChooser.setSelectedExtensionFilter(imageFilter);
   }
 
 
@@ -103,6 +116,7 @@ public class MainSceneController implements Initializable {
     addChatButton.setOnMouseClicked(this::onAddChatButtonClicked);
     deleteChatButton.setOnMouseClicked(this::onDeleteChatButtonClicked);
     sendButton.setOnMouseClicked(this::onSendButtonClicked);
+    attachImageButton.setOnMouseClicked(this::onAttachImageButtonClicked);
     attachFileButton.setOnMouseClicked(this::onAttachFileButtonClicked);
 
     attachedFileCancelLabel.setOnMouseClicked(this::onDetachFileButtonClicked);
@@ -162,13 +176,16 @@ public class MainSceneController implements Initializable {
 //    chatCreationNotificationLabel.collapse();
   }
 
-  private void attachFile(File file) {
-    attachedFileLabel.setText(file.getName());
+  private void attachFile(Path path, boolean isImage) {
+    attachedFileTypeLabel.setText(isImage ? "Изображение:" : "Файл:");
+    attachedFileLabel.setText(path.getFileName().toString());
+    attachedFileLabel.setTooltip(new Tooltip(path.getFileName().toString()));
     if (attachedFile == null) {
       int pos = rightBlock.getChildren().size() - 1;
       rightBlock.getChildren().add(pos, attachedFileBlock);
     }
-    attachedFile = file;
+    attachedFile = path;
+    isImageFileAttached = isImage;
   }
 
   private void detachFile() {
@@ -261,16 +278,23 @@ public class MainSceneController implements Initializable {
         });
   }
 
+  private void processAttachingImage() {
+    File file = messageImageChooser.showOpenDialog(shadow.getScene().getWindow());
+    if (file != null) {
+      attachFile(file.toPath(), true);
+    }
+  }
+
   private void processAttachingFile() {
     File file = messageFileChooser.showOpenDialog(shadow.getScene().getWindow());
     if (file != null) {
-      attachFile(file);
+      attachFile(file.toPath(), false);
     }
   }
 
   private void processSendingMessage() {
     String messageText = messageInput.getText();
-    File messageFile = attachedFile;
+    Path messageFile = attachedFile;
     if (messageText.isEmpty() && messageFile == null) {
       return;
     }
@@ -278,7 +302,11 @@ public class MainSceneController implements Initializable {
     messageInput.clear();
     detachFile();
 
-    stateManager.processSendingMessage(messageText, messageFile);
+    if (messageFile == null) {
+      stateManager.processSendingMessage(messageText);
+    } else {
+      stateManager.processSendingMessage(messageText, messageFile, isImageFileAttached);
+    }
 //        .thenWeaklyConsumeAsync(status -> {
 //          if (status == ClientStatus.OK) {
 //            FxUtil.runOnFxThread(() -> {
@@ -358,6 +386,12 @@ public class MainSceneController implements Initializable {
   private void onChatDeletionCancelButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       closeChatDeletionBlock();
+    }
+  }
+
+  private void onAttachImageButtonClicked(MouseEvent e) {
+    if (e.getButton().equals(MouseButton.PRIMARY)) {
+      processAttachingImage();
     }
   }
 

@@ -14,7 +14,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -43,13 +42,11 @@ public class AppUserService implements UserDetailsService {
 
   @Transactional
   public void registerUser(String username, String password) throws ConstraintViolationException {
-    Objects.requireNonNull(username, "username cannot be null");
-    Objects.requireNonNull(password, "username cannot be null");
-
-    if (username.length() < 4 || username.length() > 16 || !username.matches("\\w+")) {
+    if (username == null || username.length() < 4 ||
+        username.length() > 16 || !username.matches("\\w+")) {
       throw new InvalidUsernameException();
     }
-    if (password.length() < 6) {
+    if (password == null || password.length() < 6) {
       throw new InvalidPasswordException();
     }
     if (appUserRepository.existsAppUserByUsername(username)) {

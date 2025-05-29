@@ -29,6 +29,7 @@ import org.reminstant.secretalk.client.SpringBootWrapperApplication;
 import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.util.FxUtil;
 
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -85,6 +86,11 @@ public class MessageEntry extends HBox {
     this.messageAuthor = new Label(message.getAuthor());
     Label messageText = new Label(message.getText());
 
+    if (message.getFilePath() != null && message.isImage()) {
+      fileImage = new ImageView(message.getFilePath().toUri().toString());
+      messageBlock.getChildren().add(fileImage);
+    }
+
     if (!message.getText().isEmpty()) {
       messageBlock.getChildren().add(messageText);
     }
@@ -93,7 +99,7 @@ public class MessageEntry extends HBox {
     messageAuthor.getStyleClass().add("messageAuthor");
     messageText.getStyleClass().add("messageText");
 
-    if (message.getFileName() != null) {
+    if (message.getFileName() != null && !message.isImage()) {
       String iconPath = message.getFilePath() != null
           ? "icons/filled/fileIcon32x32.png"
           : "icons/filled/downloadIcon32x32.png";

@@ -43,7 +43,7 @@
 }
 
 #rightBlock {
-    -fx-min-width: 300px;
+    -fx-min-width: 335px;
 
     -fx-background-color: #cfcfcf;
     -fx-border-width: 0 0 0 1px;
@@ -206,13 +206,17 @@
     -fx-background-color: #c0c0c0;
 }
 
+.messageBlock .image-view {
+    -fx-fit-width: 280px;
+    -fx-preserve-ratio: true;
+}
+
 .messageBlock .messageText {
     -fx-max-width: INFINITY;
     -fx-font-size: 14pt;
     -fx-text-fill: #181818;
     -fx-wrap-text: true;
 }
-
 
 .messageBlock .messageFileBlock {
     -fx-spacing: 5pt;

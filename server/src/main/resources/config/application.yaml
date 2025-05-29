@@ -45,6 +45,7 @@ api:
   desert-chat: /api/chat/desert-chat
   destroy-chat: /api/chat/destroy-chat
   send-chat-message: /api/chat/send-chat-message
+  send-image: /api/chat/send-image
   send-file-part: /api/chat/send-file-part
   request-message-file: /api/chat/request-message-file
 

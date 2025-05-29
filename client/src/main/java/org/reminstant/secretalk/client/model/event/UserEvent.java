@@ -31,6 +31,7 @@ public abstract class UserEvent {
       case ChatDesertEvent.EVENT_NAME -> defaultObjectMapper.readValue(data, ChatDesertEvent.class);
       case ChatDestroyEvent.EVENT_NAME -> defaultObjectMapper.readValue(data, ChatDestroyEvent.class);
       case ChatMessageEvent.EVENT_NAME -> defaultObjectMapper.readValue(data, ChatMessageEvent.class);
+      case ChatImageEvent.EVENT_NAME -> defaultObjectMapper.readValue(data, ChatImageEvent.class);
       case ChatFileEvent.EVENT_NAME -> defaultObjectMapper.readValue(data, ChatFileEvent.class);
 
       case VoidEvent.EVENT_NAME -> VoidEvent.instance;
