@@ -1,14 +1,12 @@
 package org.reminstant.secretalk.client.application;
 
 import javafx.application.HostServices;
-import javafx.beans.WeakInvalidationListener;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -184,6 +182,7 @@ public class ChatManager {
         log.error("Failed to load chat '{}'", chat.getTitle(), ex);
       }
     }
+    FxUtil.runOnFxThread(this::updateChatHint);
   }
 
   public void reset() {

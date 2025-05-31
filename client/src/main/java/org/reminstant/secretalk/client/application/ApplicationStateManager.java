@@ -4,10 +4,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Screen;
@@ -25,8 +22,8 @@ import org.reminstant.concurrent.functions.ThrowingFunction;
 import org.reminstant.cryptography.CryptoProvider;
 import org.reminstant.cryptography.context.CryptoProgress;
 import org.reminstant.cryptography.context.SymmetricCryptoContext;
-import org.reminstant.secretalk.client.component.DiffieHellmanGenerator;
-import org.reminstant.secretalk.client.component.ServerClient;
+import org.reminstant.cryptography.asymmetric.DiffieHellmanGenerator;
+import org.reminstant.secretalk.client.service.ServerClient;
 import org.reminstant.secretalk.client.dto.DHResponse;
 import org.reminstant.secretalk.client.dto.JwtResponse;
 import org.reminstant.secretalk.client.dto.NoPayloadResponse;
@@ -41,7 +38,6 @@ import org.reminstant.secretalk.client.util.ClientStatus;
 import org.reminstant.secretalk.client.util.FxUtil;
 import org.springframework.stereotype.Component;
 
-import java.beans.Visibility;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -157,7 +153,8 @@ public class ApplicationStateManager {
 
   public ApplicationStateManager(FxWeaver fxWeaver,
                                  ServerClient serverClient,
-                                 ChatManager chatManager, LocalStorage localStorage) {
+                                 ChatManager chatManager,
+                                 LocalStorage localStorage) {
     this.fxWeaver = fxWeaver;
     this.serverClient = serverClient;
     this.chatManager = chatManager;
@@ -170,19 +167,7 @@ public class ApplicationStateManager {
   public void init(Stage stage) {
     this.stage = stage;
     stage.setTitle("Secretalk");
-    showLoginScene(); // NOSONAR
-//    showMainScene(); // NOSONAR
-    try {
-//      localStorage.init("anonymous"); // NOSONAR
-//      chatManager.loadChats(); // NOSONAR
-    } catch (Exception ex) {
-      try {
-        defaultHandler.apply(ex);
-      } catch (Exception ex2) {
-        log.error("Got unexpected exception", ex2);
-      }
-    }
-//    serverClient.saveCredentials("anonymous", ""); // NOSONAR
+    showLoginScene();
   }
 
   public void initChatManager(Pane chatHolder, Label chatHint, VBox chatBlock,

@@ -46,13 +46,11 @@ public class LoginSceneController implements Initializable {
   @FXML private Button noAccountButton;
   @FXML private Button backToLoginButton;
 
-  public LoginSceneController(ApplicationStateManager sceneManager,
+  public LoginSceneController(ApplicationStateManager stateManager,
                               StatusDescriptionHolder statusDescriptionHolder) {
-    this.stateManager = sceneManager;
+    this.stateManager = stateManager;
     this.statusDescriptionHolder = statusDescriptionHolder;
   }
-
-  // TODO: ограничить кол-во символов в инпутах
 
   @Override
   public void initialize(URL url, ResourceBundle resourceBundle) {

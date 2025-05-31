@@ -29,7 +29,6 @@ import org.reminstant.secretalk.client.SpringBootWrapperApplication;
 import org.reminstant.secretalk.client.model.Message;
 import org.reminstant.secretalk.client.util.FxUtil;
 
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -90,6 +89,8 @@ public class MessageEntry extends HBox {
       if (Files.exists(message.getFilePath())) {
         fileImage = new ImageView(message.getFilePath().toUri().toString());
         messageBlock.getChildren().add(fileImage);
+
+        fileImage.getStyleClass().add("messageImage");
       } // TODO: display no image info
     }
 
@@ -206,10 +207,14 @@ public class MessageEntry extends HBox {
     setFileImageFailed();
     stateProperty.setValue(Message.State.FAILED);
 
-    String iconPath = "icons/filled/errorIcon32x32.png";
-    String url = Objects.requireNonNull(SpringBootWrapperApplication.class
-        .getResource(iconPath)).toString();
-    fileImage.setImage(new Image(url));
+    if (fileImage != null) {
+      String iconPath = "icons/filled/errorIcon32x32.png";
+      String url = Objects.requireNonNull(SpringBootWrapperApplication.class
+          .getResource(iconPath)).toString();
+      fileImage.setImage(new Image(url));
+    } else {
+      log.warn("Failed message with no image (id={}, text={})", message.getId(), message.getText());
+    }
 
     showProgressBlock(false);
     progressBar.setVisible(false);

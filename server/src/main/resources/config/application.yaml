@@ -56,4 +56,5 @@ api:
 chat:
   message:
     text-max-byte-length: 8192
-    file-part-byte-length: 524288 # 512 KB
+    image-max-byte-length: 786432 # 768 KB
+    file-part-byte-length: 131072 # 128 KB

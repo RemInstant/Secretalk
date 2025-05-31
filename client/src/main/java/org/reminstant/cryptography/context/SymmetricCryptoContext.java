@@ -4,10 +4,6 @@ import org.reminstant.concurrent.ChainableFuture;
 import org.reminstant.concurrent.Progress;
 import org.reminstant.cryptography.Bits;
 import org.reminstant.cryptography.SymmetricCryptoSystem;
-import org.reminstant.cryptography.symmetric.DEAL;
-import org.reminstant.cryptography.symmetric.DES;
-import org.reminstant.cryptography.symmetric.MAGENTA;
-import org.reminstant.cryptography.symmetric.Serpent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +26,7 @@ import static java.nio.file.StandardOpenOption.*;
 public final class SymmetricCryptoContext {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SymmetricCryptoContext.class);
-  private static final int PARALLELISM = Runtime.getRuntime().availableProcessors();
+  private static final int PARALLELISM = Runtime.getRuntime().availableProcessors() / 2;
   private static final ExecutorService DEFAULT_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
   public static final String RD_PARAM = "RandomDelta";

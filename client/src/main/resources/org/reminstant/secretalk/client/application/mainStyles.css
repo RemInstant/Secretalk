@@ -206,7 +206,7 @@
     -fx-background-color: #c0c0c0;
 }
 
-.messageBlock .image-view {
+.messageBlock .messageImage {
     -fx-fit-width: 280px;
     -fx-preserve-ratio: true;
 }

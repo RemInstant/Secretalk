@@ -1,4 +1,4 @@
-package org.reminstant.secretalk.client.component;
+package org.reminstant.cryptography.asymmetric;
 
 
 import java.math.BigInteger;

@@ -90,9 +90,9 @@ public class MainSceneController implements Initializable {
   private ChainableFuture<Void> lastCreationChatFuture = ChainableFuture.getCompleted();
 
 
-  public MainSceneController(ApplicationStateManager sceneManager,
+  public MainSceneController(ApplicationStateManager stateManager,
                              StatusDescriptionHolder statusDescriptionHolder) {
-    this.stateManager = sceneManager;
+    this.stateManager = stateManager;
     this.statusDescriptionHolder = statusDescriptionHolder;
 
     this.messageFileChooser = new FileChooser();
@@ -101,7 +101,8 @@ public class MainSceneController implements Initializable {
     this.isImageFileAttached = false;
 
     FileChooser.ExtensionFilter imageFilter =
-        new FileChooser.ExtensionFilter("Images (*.jpg, *.png)", "*.jpg", "*.png");
+        new FileChooser.ExtensionFilter("Images (*.jpg, *.jpeg, *.png, *.gif, *.bmp)",
+            "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp");
 
     messageImageChooser.getExtensionFilters().add(imageFilter);
     messageImageChooser.setSelectedExtensionFilter(imageFilter);
@@ -121,6 +122,7 @@ public class MainSceneController implements Initializable {
     attachFileButton.setOnMouseClicked(this::onAttachFileButtonClicked);
 
     attachedFileCancelLabel.setOnMouseClicked(this::onDetachFileButtonClicked);
+    messageInput.setOnKeyReleased(this::onMessageInputKeyReleased);
 
     chatConnectionAcceptButton.setOnMouseClicked(this::onConnectionAcceptButtonClicked);
     chatConnectionRequestButton.setOnMouseClicked(this::onConnectionRequestButtonClicked);
@@ -409,6 +411,12 @@ public class MainSceneController implements Initializable {
   private void onDetachFileButtonClicked(MouseEvent e) {
     if (e.getButton().equals(MouseButton.PRIMARY)) {
       detachFile();
+    }
+  }
+
+  private void onMessageInputKeyReleased(KeyEvent e) {
+    if (e.getCode().equals(KeyCode.ENTER) && e.isControlDown()) {
+      processSendingMessage();
     }
   }
 

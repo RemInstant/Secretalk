@@ -1,4 +1,4 @@
-package org.reminstant.secretalk.client.component;
+package org.reminstant.secretalk.client.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.reminstant.secretalk.client.dto.*;
 import org.reminstant.secretalk.client.exception.*;
 import org.reminstant.secretalk.client.model.Chat;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URI;
@@ -20,7 +20,7 @@ import java.util.Base64;
 import java.util.Map;
 
 @Slf4j
-@Component
+@Service
 public class ServerClient {
 
   private static final String AUTHORIZATION_HEADER = "Authorization";

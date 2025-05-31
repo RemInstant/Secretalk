@@ -22,8 +22,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 public class EventController {
-  
-  private static final int FILE_BLOCK_BYTE_SIZE = 128 * (1 << 10);
 
   private static final ResponseEntity<StatusWrapper> internalErrorResponse = ResponseEntity
       .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -51,6 +49,8 @@ public class EventController {
 
   @Value("${chat.message.text-max-byte-length}")
   private int textMaxByteLength;
+  @Value("${chat.message.image-max-byte-length}")
+  private int imageMaxByteLength;
   @Value("${chat.message.file-part-byte-length}")
   private int filePartByteLength;
 
@@ -160,6 +160,9 @@ public class EventController {
     }
     if (principal.getName().equals(data.otherUsername())) {
       return selfRequestResponse;
+    }
+    if (data.chatConfiguration().title().length() > 32) {
+      return tooMuchDataResponse;
     }
 
     try {
@@ -329,8 +332,7 @@ public class EventController {
     if (principal.getName().equals(data.otherUsername())) {
       return selfRequestResponse;
     }
-
-    if (data.imageData().length > filePartByteLength) {
+    if (data.imageData().length > imageMaxByteLength) {
       return tooMuchDataResponse;
     }
 
@@ -361,10 +363,13 @@ public class EventController {
     if (principal.getName().equals(data.otherUsername())) {
       return selfRequestResponse;
     }
+    if (data.fileData().length > filePartByteLength) {
+      return tooMuchDataResponse;
+    }
 
     String fileName = data.chatId() + data.messageId();
     try {
-      long pos = data.partNumber() * FILE_BLOCK_BYTE_SIZE;
+      long pos = data.partNumber() * filePartByteLength;
       fileStorage.writeFilePart(fileName, pos, data.fileData());
     } catch (LocalFileStorageException ex) {
       log.error("File storage exception", ex);
@@ -401,18 +406,18 @@ public class EventController {
       }
 
       long fileSize = fileStorage.getFileSize(fileName);
-      long partCnt = fileSize / FILE_BLOCK_BYTE_SIZE;
-      if (fileSize % FILE_BLOCK_BYTE_SIZE != 0) {
+      long partCnt = fileSize / filePartByteLength;
+      if (fileSize % filePartByteLength != 0) {
         partCnt++;
       }
 
-      byte[] readBlock = new byte[FILE_BLOCK_BYTE_SIZE];
+      byte[] readBlock = new byte[filePartByteLength];
       for (long i = 0; i < partCnt; ++i) {
-        long pos = i * FILE_BLOCK_BYTE_SIZE;
+        long pos = i * filePartByteLength;
         int read = fileStorage.readFilePart(fileName, pos, readBlock);
 
         byte[] block;
-        if (read == FILE_BLOCK_BYTE_SIZE) {
+        if (read == filePartByteLength) {
           block = readBlock;
         } else {
           block = Arrays.copyOf(readBlock, read);
