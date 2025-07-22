@@ -52,7 +52,8 @@ public class ServerClient {
         .build(), null, JwtResponse.class);
   }
 
-  public NoPayloadResponse processRegister(String login, String password) throws ServerConnectionException, ServerResponseException, InterruptedException {
+  public NoPayloadResponse processRegister(String login, String password)
+      throws ServerConnectionException, ServerResponseException, InterruptedException {
     Map<String, Object> data = Map.of(
         "username", login,
         "password", password);

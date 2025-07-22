@@ -58,7 +58,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
       if (context != null && context.getAuthentication() != null &&
           !(context.getAuthentication() instanceof PreAuthenticatedAuthenticationToken)) {
         if (context.getAuthentication().getPrincipal() instanceof UserDetails userDetails) {
-          String jwtToken = jwtService.generateToken(userDetails, Duration.ofDays(999));
+          String jwtToken = jwtService.generateToken(userDetails, Duration.ofDays(1));
 
           response.setStatus(HttpServletResponse.SC_OK);
           response.setContentType(MediaType.APPLICATION_JSON_VALUE);

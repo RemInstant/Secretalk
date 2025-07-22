@@ -47,7 +47,7 @@ public class NatsBrokerService implements DisposableBean {
         .name(streamName)
         .subjects("%s.>".formatted(subjectPrefix))
         .retentionPolicy(RetentionPolicy.WorkQueue)
-        .storageType(StorageType.Memory) // TODO: change to file
+        .storageType(StorageType.File)
         .build());
 
     jetStream = natsConnection.jetStream();

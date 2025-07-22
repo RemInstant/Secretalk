@@ -187,19 +187,21 @@ public class ChatManager {
 
   public void reset() {
     throwIfUninitialised();
-    processingMessageEntries.values().forEach(entry -> {
-      Message.State state = entry.getMessage().getState();
-      if (state != Message.State.REQUESTING && state != Message.State.SENT) {
-        entry.fail();
-      }
+    FxUtil.runOnFxThread(() -> {
+      processingMessageEntries.values().forEach(entry -> {
+        Message.State state = entry.getMessage().getState();
+        if (state != Message.State.REQUESTING && state != Message.State.SENT) {
+          entry.fail();
+        }
+      });
+      chatHolder.getChildren().clear();
+      secretChatEntries.clear();
+      messageHolders.clear();
+      cryptoContexts.clear();
+      activeChat.set(null);
+      messageEntries.clear();
+      processingMessageEntries.clear();
     });
-    chatHolder.getChildren().clear();
-    secretChatEntries.clear();
-    messageHolders.clear();
-    cryptoContexts.clear();
-    activeChat.set(null);
-    messageEntries.clear();
-    processingMessageEntries.clear();
   }
 
   public boolean isInitialised() {

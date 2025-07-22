@@ -564,6 +564,10 @@ public class ApplicationStateManager {
     UserEvent rawEvent;
     try {
       UserEventWrapperResponse wrapper = serverClient.getEvent(EVENT_CYCLE_TIMEOUT);
+      if (wrapper.getInternalStatus() == 401000) {
+        processLogout();
+        return false;
+      }
       rawEvent = UserEvent.getEvent(wrapper.getEventType(), wrapper.getEventJson().getBytes());
     } catch (ServerResponseException ex) {
       log.error("Server response error", ex);
